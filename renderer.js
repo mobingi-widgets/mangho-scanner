@@ -364,6 +364,25 @@ function setProblems(list) {
 }
 window.setProblems = setProblems;
 
+// "새로운 업데이트가 있습니다!" under the tabs (click: the update window); a short message from
+// the update check takes its place for a few seconds
+let updPill = '';
+let updToast = null;
+let updToastT = 0;
+function drawPill() {
+  const p = $('updpill');
+  const text = updToast ? updToast.text : updPill;
+  p.hidden = !text;
+  p.textContent = text;
+  p.className = `updpill hit ${updToast ? `toast ${updToast.level}` : ''}`;
+}
+$('updpill').addEventListener('click', () => {
+  if (blocked()) return;
+  if (updToast) { updToast = null; drawPill(); return; }     // a message: click = dismiss
+  window.mangho.ui('update-open');
+});
+window.__pill = (text, toast) => { if (toast) updToast = { text, level: 'info' }; else updPill = text; drawPill(); };
+
 // The list is cut to the height limit and scrolls instead. main.js sends room = { h: the
 // limit in force, game: down to the game window's bottom, max: the user's limit }, all CSS
 // px from the overlay's top. The user sets the limit by dragging the thin line at the
@@ -452,10 +471,19 @@ window.mangho.onFeed((d) => {
       hovering = false;                  // main made the window click-through again; the next move re-asks
     }
   } else if (d.type === 'update') {
-    // a newer release: a dot on the ☰; installing is in the menu (never by itself)
+    // a newer release: a dot on the ☰ and the pill (unless skipped); installing is in the
+    // update window it opens (never by itself)
     $('menu').classList.toggle('upd', !!d.version);
     $('menu').dataset.upd = d.version || '';
+    updPill = d.pill ? `새로운 업데이트가 있습니다! (v${d.version})` : '';
+    drawPill();
     setProblems(problems);
+  } else if (d.type === 'update-toast') {
+    // a short message in the pill's place: 최신 버전입니다 / 업데이트 확인 실패 / x로 업데이트됨 ...
+    updToast = { text: d.text, level: d.level || 'info' };
+    drawPill();
+    clearTimeout(updToastT);
+    updToastT = setTimeout(() => { updToast = null; drawPill(); }, (d.sec || 3) * 1000);
   } else if (d.type === 'menu') {
     blockUntil = d.open ? Infinity : Date.now() + 300;
   }

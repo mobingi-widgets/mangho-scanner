@@ -9,8 +9,9 @@ Only when the user asks for one (workspace policy: it is a ~145 MB build).
 --release makes the GitHub release files the apps' updater reads (updater.js):
     mangho-scanner-<v>-full.zip   the whole build ("망호 스캐너/" folder) - first install, new Electron
     mangho-scanner-<v>-app.zip    resources\\app only (the code, KB) - what an update swaps in
-    latest.json                   {schema, app, version, pub_date, notes (CHANGELOG), runtime, assets}
-    *.minisig                     each of the three, signed by ../tools/release/sign.js
+    mangho-scanner-notice-<N>.html  the notice (이용 안내) of this version, N = its notice-version
+    latest.json                   {schema, app, version, pub_date, notes (CHANGELOG), runtime, notice, assets}
+    *.minisig                     each of the four, signed by ../tools/release/sign.js
 Publishing them (tag v<version>) is done separately (tools/release/publish.js).
 
 Steps: icon.ico from icon.png (Pillow) -> `node build_exe.js` (@electron/packager, a
@@ -52,6 +53,14 @@ def changelog_notes(ver):
     text = open(os.path.join(HERE, "CHANGELOG.md"), encoding="utf-8").read()
     m = re.search(r"^## %s\b.*?$(.*?)(?=^## |\Z)" % re.escape(ver), text, re.S | re.M)
     return m.group(1).strip() if m else ""
+
+
+def notice_version():
+    """<meta name="notice-version" content="N"> in notice.html - the one place the notice's version is set."""
+    m = re.search(r'<meta\s+name="notice-version"\s+content="(\d+)"', open(os.path.join(HERE, "notice.html"), encoding="utf-8").read())
+    if not m:
+        raise SystemExit("notice.html에 notice-version이 없음")
+    return int(m.group(1))
 
 
 def make_icon():
@@ -142,17 +151,22 @@ def main(argv):
     zip_tree(full, app, NAME, docs)
     zip_tree(appzip, os.path.join(app, "resources", "app"))
     shutil.rmtree(build, ignore_errors=True)
+    # the notice (이용 안내) of this version: shown before the download when its version went up
+    nver = notice_version()
+    notice = os.path.join(rel, "%s-notice-%d.html" % (APP_ID, nver))
+    shutil.copyfile(os.path.join(HERE, "notice.html"), notice)
     feed = {
         "schema": 1, "app": APP_ID, "version": ver,
         "pub_date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "notes": changelog_notes(ver),
         "runtime": {"electron": electron_version()},
+        "notice": {"version": nver, **asset(notice)},
         "assets": {"app": asset(appzip), "full": asset(full)},
     }
     latest = os.path.join(rel, "latest.json")
     with open(latest, "w", encoding="utf-8") as fh:
         json.dump(feed, fh, ensure_ascii=False, indent=1)
-    sign = subprocess.run(["node", os.path.join(WORKSPACE, "tools", "release", "sign.js"), appzip, full, latest],
+    sign = subprocess.run(["node", os.path.join(WORKSPACE, "tools", "release", "sign.js"), appzip, full, notice, latest],
                           capture_output=True, text=True, encoding="utf-8")
     if sign.returncode != 0:
         print("서명 실패:\n" + sign.stderr[-1000:])

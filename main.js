@@ -19,74 +19,29 @@ const dockLib = require('./dock');
 const updater = require('./updater');
 const consent = require('./consent');
 
-// The first-run notice (notice.html): nothing starts - no gallery reads, no window tracking,
-// no update check - until it is agreed to. Raise the version when the notice changes in
-// substance; everyone is asked again then.
-const NOTICE_VERSION = 1;
+// The notice (이용 안내, notice.html - its <meta name="notice-version"> is the version): nothing
+// starts - no gallery reads, no window tracking, no update check - until it is agreed to.
 const NOTICE_TITLE = '망호 스캐너 — 이용 안내';
 let starting = true;                   // the notice may be the only window for a while: do not quit then
 
 // ------------------------------------------------------------------- updates
-// From the GitHub releases of mobingi-widgets/mangho-scanner (updater.js: signed, strictly
-// newer only). Checked at start and every 6 h; never installs or restarts by itself -
-// the ☰ gets a dot and the menu an "업데이트 … 설치" line (user, 2026-11-27: they are in the game).
-// Installing swaps resources\app of the built exe; a source run (npm start) only reports.
-const UPDATE = { repo: 'mangho-scanner', app: 'mangho-scanner', everyMs: 6 * 3600 * 1000 };
-const upd = { info: null, error: '', at: 0, busy: false };
-const canInstall = () => app.isPackaged;
-const okFile = () => path.join(app.getPath('userData'), 'update-ok.json');
-
-async function checkUpdate() {
-  if (upd.busy) return;
-  upd.busy = true;
-  try {
-    upd.info = await updater.check({ repo: UPDATE.repo, app: UPDATE.app, version: app.getVersion() });
-    upd.error = '';
-  } catch (e) {
-    upd.error = String((e && e.message) || e);
-  } finally {
-    upd.busy = false;
-    upd.at = Date.now();
-    toPage({ type: 'update', version: upd.info && upd.info.available ? upd.info.version : null });
-  }
-}
-
-async function installUpdate() {
-  const info = upd.info;
-  if (!info || !info.available || info.needFull || !canInstall() || upd.busy) return;
-  upd.busy = true;
-  try {
-    const appDir = path.join(process.resourcesPath, 'app');
-    const staged = await updater.stage(info, path.join(process.resourcesPath, '.update'));
-    updater.handOver(staged, info, {
-      appDir, keep: [], launch: process.execPath, launchCwd: path.dirname(process.execPath),
-      okFile: okFile(), logFile: path.join(app.getPath('userData'), 'update.log'),
-    });
-    app.quit();
-  } catch (e) {
-    upd.error = `설치 안 함 — ${(e && e.message) || e}`;
-    upd.busy = false;
-    pushProblems();
-  }
-}
-
-function updateLines() {
-  const i = upd.info;
-  const out = [];
-  if (i && i.available) {
-    const first = i.notes.split('\n').map((s) => s.replace(/^[-*]\s*/, '').trim()).find(Boolean) || '';
-    if (i.needFull) out.push({ label: `⬆ 새 버전 ${i.version} — 전체 설치 필요 (릴리스 페이지 열기)`, click: () => shell.openExternal(i.page) });
-    else if (!canInstall()) out.push({ label: `⬆ 새 버전 ${i.version} — 소스 실행이라 git으로 받기`, enabled: false });
-    else out.push({ label: `⬆ 업데이트 ${i.version} 설치 (스캐너 재시작)`, click: installUpdate });
-    if (first) out.push({ label: `   ${first.length > 60 ? first.slice(0, 60) + '…' : first}`, enabled: false });
-    out.push({ label: '   변경 내용 보기 (릴리스 페이지)', click: () => shell.openExternal(i.page) });
-  }
-  const when = upd.at ? `${ago(upd.at)} 전 확인` : '확인 전';
-  const state = upd.error ? `업데이트 확인 실패 — ${upd.error}` : i && i.none ? `업데이트: 아직 릴리스 없음 · ${when}`
-    : i && !i.available ? `업데이트: 최신 (${app.getVersion()}) · ${when}` : i ? `현재 ${app.getVersion()} · ${when}` : `업데이트: ${when}`;
-  out.push({ label: state, enabled: false });
-  out.push({ label: '업데이트 지금 확인', click: () => checkUpdate() });
-  return out;
+// From the GitHub releases of mobingi-widgets/mangho-scanner: update-ui.js (the window, the
+// steps, after Scouter Lite's flow) on updater.js (signed, strictly newer only). Never installs
+// or restarts by itself (user, 2026-11-27: they are in the game). Installing swaps resources\app
+// of the built exe; a source run (npm start) only reports.
+let uui = null;
+function makeUpdateUi() {
+  return require('./update-ui').create({
+    dir: __dirname, repo: 'mangho-scanner', app: 'mangho-scanner', version: app.getVersion(), title: '망호 스캐너',
+    userData: app.getPath('userData'),
+    canInstall: () => app.isPackaged,
+    stageRoot: () => path.join(process.resourcesPath, '.update'),
+    previousDir: () => path.join(process.resourcesPath, '.update', 'previous'),
+    installOpts: () => ({ appDir: path.join(process.resourcesPath, 'app'), keep: [], launch: process.execPath, launchCwd: path.dirname(process.execPath) }),
+    cfg: () => cfg, saveCfg, near: () => gameRectDip(),
+    page: (m) => toPage(m),
+    quit: () => app.quit(),
+  });
 }
 
 const EVERY_MS = 60 * 1000;      // one scan a minute (user)
@@ -179,7 +134,6 @@ function problems() {
   if (scan.fails >= 2) out.push(`스캔 실패 ${scan.fails}회 연속 — ${scan.error}`);
   else if (scan.okAt && Date.now() - scan.okAt > 3 * EVERY_MS && !scan.paused) out.push(`스캔 멈춤 (${ago(scan.okAt)} 전이 마지막)`);
   if (tracker.dead) out.push(`게임 창 추적 불가 — ${tracker.error || 'PowerShell 실행 실패'}`);
-  if (upd.error.startsWith('설치 안 함')) out.push(`업데이트 ${upd.error}`);   // a failed check (offline...) does not nag
   return out;
 }
 
@@ -466,7 +420,7 @@ function buildMenu() {
   return Menu.buildFromTemplate([
     ...syncLines().map((label) => ({ label, enabled: false })),
     { type: 'separator' },
-    ...updateLines(),
+    ...(uui ? uui.menuLines() : []),
     { type: 'separator' },
     { label: '지금 스캔', click: () => runScan() },
     { label: '망호 탭 브라우저로 열기', click: () => shell.openExternal(scanner.listUrl(state.src)) },
@@ -563,8 +517,9 @@ function createWindow() {
     lastProblems = '';
     pushProblems();
     if (scan.last) toPage({ type: 'snapshot', ...scan.last });
-    if (upd.info) toPage({ type: 'update', version: upd.info.available ? upd.info.version : null });
-    updater.markHealthy(okFile(), app.getVersion());     // an update waits for this, else it rolls back
+    if (uui) uui.pageState();
+    // an update waits for this, else it rolls back
+    updater.markHealthy(path.join(app.getPath('userData'), 'update-ok.json'), app.getVersion());
     place();
   });
 }
@@ -703,6 +658,8 @@ ipcMain.on('ui', (_e, action, arg) => {
     // only a post from the last scan, by number - the page never hands over a URL
     const p = scan.last && scan.last.posts.find((x) => x.no === Number(arg));
     if (p) shell.openExternal(p.url);
+  } else if (action === 'update-open') {
+    if (uui) uui.show();                // the overlay's "새로운 업데이트가 있습니다!" pill
   } else if (action === 'open-list') {
     shell.openExternal(scanner.listUrl(state.src));
   }
@@ -714,10 +671,17 @@ if (!app.requestSingleInstanceLock()) {
   app.on('second-instance', () => setShow(cfg.show === 'hidden' ? 'always' : cfg.show));
   app.whenReady().then(async () => {
     cfg = loadCfg();
-    if (!SHOT && (cfg.notice || 0) < NOTICE_VERSION) {
-      const ok = await consent.ask({ dir: __dirname, title: NOTICE_TITLE });
-      if (!ok) { app.quit(); return; }
-      saveCfg({ notice: NOTICE_VERSION, noticeAt: new Date().toISOString() });
+    uui = makeUpdateUi();
+    if (process.env.UPDATE_DEMO) { await uui.demo(process.env.UPDATE_DEMO); app.quit(); return; }
+    const noticeV = consent.noticeVersion(__dirname);
+    if (!SHOT && (cfg.notice || 0) < noticeV) {
+      // first run, or this version's notice is newer than the agreed one (e.g. a zip put over
+      // by hand): ask before anything starts; with the old version kept aside, offer going back
+      const guard = app.isPackaged && uui.hasPrevious();
+      const answer = await consent.ask({ dir: __dirname, title: NOTICE_TITLE, mode: guard ? 'guard' : 'ask' });
+      if (answer === 'rollback') { uui.rollback(); return; }
+      if (answer !== true) { app.quit(); return; }
+      saveCfg({ notice: noticeV, noticeAt: new Date().toISOString(), noticeDeclined: null });
     }
     if (cfg.source) state.src = { ...state.src, ...cfg.source };
     createTray();
@@ -735,9 +699,9 @@ if (!app.requestSingleInstanceLock()) {
     startTracker();
     runScan();
     if (!SHOT) {
-      setTimeout(checkUpdate, 10 * 1000);
-      setInterval(checkUpdate, UPDATE.everyMs);
-      if (canInstall()) setTimeout(() => updater.cleanup(path.join(process.resourcesPath, '.update'), app.getVersion()), 90 * 1000);
+      uui.start();
+      setTimeout(() => uui.afterStart(), 3000);      // "x.y.z로 업데이트됨" / "되돌렸습니다" once the page is up
+      if (app.isPackaged) setTimeout(() => updater.cleanup(path.join(process.resourcesPath, '.update'), app.getVersion()), 90 * 1000);
     }
     setInterval(raise, 2000);
     setInterval(checkMode, 1000);

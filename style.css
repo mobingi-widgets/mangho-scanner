@@ -62,6 +62,15 @@ body.busy .tab.on .cnt { opacity: .5; }
   content: ''; position: absolute; top: 1px; right: 1px; width: 6px; height: 6px; border-radius: 50%;
   background: var(--green); box-shadow: 0 0 0 1px rgba(0,0,0,.6);
 }
+/* "새로운 업데이트가 있습니다!" (after Scouter Lite's green pill); short messages use the same spot */
+.updpill {
+  margin: 2px 0 1px; padding: 1px 10px; border-radius: 9px; font-size: 11px; line-height: 17px; cursor: pointer;
+  background: #17a88a; color: #fff; text-shadow: 0 0 2px rgba(0,0,0,.6); max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.updpill[hidden] { display: none; }
+.updpill.toast { background: rgba(30, 34, 40, .92); border: 1px solid var(--line); }
+.updpill.toast.warn { border-color: var(--red); color: #ffd0cb; }
 @keyframes pulse { 50% { filter: brightness(1.35); } }
 
 /* the list - same family as the game's chat box (dark, rounded, translucent) */
