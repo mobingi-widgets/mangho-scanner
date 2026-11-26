@@ -1,0 +1,12 @@
+# installed by npm install / the .bat on first run
+node_modules/
+
+# caches
+__pycache__/
+*.pyc
+*.log
+
+# build output (build_dist.py, build_exe.js); icon.ico is made from icon.png
+dist/
+out/
+icon.ico

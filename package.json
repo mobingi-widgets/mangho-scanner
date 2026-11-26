@@ -1,0 +1,15 @@
+{
+  "name": "mangho-scanner",
+  "version": "1.3.0",
+  "private": true,
+  "description": "망호 스캐너 — 에반(마비노기 모바일) 갤러리 망호 말머리 오버레이 (읽기 전용)",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "scan": "node scanner.js"
+  },
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "electron": "45.3.1"
+  }
+}

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'">
+<title>망호 스캐너</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="expanded">
+<div id="root">
+  <div class="head">
+    <span id="role" class="pill role hit tipm">모</span>
+    <span class="pill tab hit tipm on" data-kind="normal"><span class="ic"></span>망호 <span class="cnt num">–</span><span class="chev"></span></span>
+    <span class="pill tab hit tipm" data-kind="sub"><span class="ic"></span>잠망호 <span class="cnt num">–</span><span class="chev"></span></span>
+    <span id="modepill" class="pill">창 모드</span>
+    <span id="menu" class="pill grip hit" title="메뉴 — 스캔 정보 · 지금 스캔 · 망호 탭 열기 · 위치 이동 · 표시 · 종료">☰</span>
+  </div>
+  <div class="panel" id="panel">
+    <div id="list" class="list"><div class="empty">읽는 중…</div></div>
+  </div>
+  <div id="sizer" class="hit" title="끌기: 최대 높이 정하기 (넘치면 목록이 스크롤) · 두 번 클릭: 제한 없음"></div>
+</div>
+<script src="renderer.js"></script>
+</body>
+</html>
