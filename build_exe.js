@@ -33,7 +33,7 @@ const NAME = '망호 스캐너';
     asar: false,
     prune: true,                       // devDependencies (electron, packager) stay out
     ignore: [/^\/build_dist\.py$/, /^\/build_exe\.js$/, /\.bat$/, /^\/package-lock\.json$/,
-      /^\/README\.md$/, /^\/CHANGELOG\.md$/, /^\/icon\.ico$/],
+      /^\/README\.md$/, /^\/CHANGELOG\.md$/, /^\/icon\.ico$/, /^\/docs($|\/)/, /^\/\.git/],
     win32metadata: {
       FileDescription: NAME, ProductName: NAME, CompanyName: NAME,
       OriginalFilename: `${NAME}.exe`, InternalName: 'mangho-scanner',

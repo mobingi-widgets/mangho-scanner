@@ -383,6 +383,21 @@ $('updpill').addEventListener('click', () => {
 });
 window.__pill = (text, toast) => { if (toast) updToast = { text, level: 'info' }; else updPill = text; drawPill(); };
 
+// README screenshots (main.js demoShots): numbered marks ①② beside parts of the overlay.
+// list: [[selector, number, 'top' | undefined]] - top: above the element, else in the left gutter
+window.__marks = (list) => {
+  document.querySelectorAll('.mark').forEach((m) => m.remove());
+  for (const [sel, n, side] of list) {
+    const e = document.querySelector(sel);
+    if (!e) continue;
+    const r = e.getBoundingClientRect();
+    const m = el('span', 'mark', String(n));
+    m.style.left = `${side === 'top' ? r.left + r.width / 2 - 8 : 3}px`;
+    m.style.top = `${side === 'top' ? r.top - 17 : r.top + r.height / 2 - 8}px`;
+    document.body.appendChild(m);
+  }
+};
+
 // The list is cut to the height limit and scrolls instead. main.js sends room = { h: the
 // limit in force, game: down to the game window's bottom, max: the user's limit }, all CSS
 // px from the overlay's top. The user sets the limit by dragging the thin line at the

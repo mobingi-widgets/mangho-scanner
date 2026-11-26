@@ -1,0 +1,15 @@
+{
+ "_": "Made-up posts for the README screenshots (docs/shots.md): no real titles or nicknames. ageMin = minutes since posted.",
+ "posts": [
+  { "no": 9000101, "kind": "normal", "title": "카브락 매어 망호 랏딜 구함", "nick": "데모고래", "uid": "demo1", "ageMin": 0.3, "replies": 1, "views": 12, "roles": ["deal"], "roleText": "랏딜" },
+  { "no": 9000100, "kind": "normal", "title": "꺼드럭 매어 아무나 2/4", "nick": "예시닉", "uid": "demo2", "ageMin": 6, "replies": 3, "views": 40 },
+  { "no": 9000099, "kind": "normal", "title": "지4 탐택 힐러구함 +7800", "nick": "테스트", "uid": "demo3", "ageMin": 8, "replies": 2, "views": 33, "roles": ["heal"], "roleText": "힐러구함" },
+  { "no": 9000098, "kind": "normal", "title": "스카스 한 바퀴 가실 분", "nick": "샘플러", "uid": "demo4", "ageMin": 12, "replies": 5, "views": 61 },
+  { "no": 9000097, "kind": "normal", "title": "카매어 헤딩 망호 (출항)", "nick": "데모고래", "uid": "demo1", "ageMin": 16, "replies": 9, "views": 140, "departed": { "by": "title", "word": "출항" } },
+  { "no": 9000096, "kind": "normal", "title": "솜사탕 망호 3/8", "nick": "예시닉", "uid": "demo2", "ageMin": 24, "replies": 4, "views": 77 },
+  { "no": 9000095, "kind": "normal", "title": "지옥3 도와주실 분", "nick": "가나다", "uid": "", "ip": "10.0", "ageMin": 41, "replies": 7, "views": 98, "departed": { "by": "comment", "word": "출항", "text": "", "dccons": ["출항"], "at": "11.27 00:46:24" } },
+  { "no": 9000094, "kind": "sub", "title": "정박지 매어2 수면팟 아침 9시까지 랏힐", "nick": "잠수부", "uid": "demo5", "ageMin": 2, "replies": 0, "views": 9, "kindRule": "잠·수면", "kindMatch": "수면", "roles": ["heal"], "roleText": "랏힐" },
+  { "no": 9000093, "kind": "sub", "title": "동굴1 잠망오 7~8시까지", "nick": "샘플러", "uid": "demo4", "ageMin": 11, "replies": 2, "views": 30, "kindRule": "잠·수면", "kindMatch": "잠망" },
+  { "no": 9000092, "kind": "sub", "title": "허박지 매어2 6시까지 (출항)", "nick": "테스트", "uid": "demo3", "ageMin": 30, "replies": 6, "views": 88, "kindRule": "사냥터", "kindMatch": "박지", "departed": { "by": "title", "word": "출항" } }
+ ]
+}

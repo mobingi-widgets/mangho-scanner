@@ -16,6 +16,7 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 const scanner = require('./scanner');
 const dockLib = require('./dock');
+const ctxLib = require('./ctxmenu');
 const updater = require('./updater');
 const consent = require('./consent');
 
@@ -83,7 +84,10 @@ function saveCfg(patch) {
 // It uses its own settings folder, so the states it clicks through are not saved as the user's.
 const SHOT = process.env.MANGHO_SHOT;
 let shotDone = false;
-if (SHOT) app.setPath('userData', path.join(require('os').tmpdir(), 'mangho-scanner-shot'));
+// MANGHO_DEMO=<dir>: the README screenshots (docs/img) from docs/demo-posts.json - see demoShots().
+const DEMO = process.env.MANGHO_DEMO;
+if (DEMO) app.setPath('userData', path.join(require('os').tmpdir(), 'mangho-scanner-demo'));
+else if (SHOT) app.setPath('userData', path.join(require('os').tmpdir(), 'mangho-scanner-shot'));
 // MANGHO_USER_DATA=<dir>: run with a settings folder of its own (tests next to an installed copy)
 else if (process.env.MANGHO_USER_DATA) app.setPath('userData', process.env.MANGHO_USER_DATA);
 
@@ -250,7 +254,7 @@ function setMode(on) {
 }
 
 function checkMode() {
-  if (SHOT) return;
+  if (SHOT || DEMO) return;
   if (game.found && !process.env.MANGHO_FORCE_APP) { lostSince = 0; setMode(false); return; }
   if (!lostSince) lostSince = Date.now();
   if (Date.now() - lostSince >= APP_AFTER_MS) setMode(true);
@@ -258,6 +262,7 @@ function checkMode() {
 
 function raise() {
   if (!win || win.isDestroyed() || !win.isVisible() || appMode) return;
+  if (ctx && ctx.isOpen()) return;       // the menu (and its click catcher) stay on top while it is up
   win.setAlwaysOnTop(true, 'screen-saver');
   win.moveTop();
 }
@@ -306,7 +311,7 @@ function updateVisibility() {
   if (cfg.show === 'hidden') visible = false;
   else if (appMode || cfg.show === 'always') visible = true;
   else visible = !game.found ? true : (!game.minimized && (game.front === 'game' || game.front === 'self'));
-  if (SHOT) visible = true;
+  if (SHOT || DEMO) visible = true;
   if (visible && !win.isVisible()) win.showInactive();
   if (!visible && win.isVisible()) win.hide();
   if (visible) raise();
@@ -377,100 +382,110 @@ function startTracker() {
 }
 
 // --------------------------------------------------------------------- menu
+// One definition (menuItems) for both menus: the overlay's own menu (ctxmenu.js - focus stays
+// with the game, a click outside only closes it) and the tray's native one (ctxmenu.toNative).
+// Least text: states as grey values on the right, choices as one-line segments, explanations
+// in the hint line at the bottom.
 
-function syncLines() {
-  const lines = [];
-  for (const p of problems()) lines.push(`⚠ ${p}`);
-  const src = state.src;
-  lines.push(`🐳 ${src.name} 갤러리 · 망호 말머리`);
-  if (scan.paused) lines.push('○ 숨긴 동안 스캔 쉼');
-  else if (scan.okAt) {
-    const next = Math.max(0, Math.round((scan.nextAt - Date.now()) / 1000));
-    lines.push(`● ${ago(scan.okAt)} 전 스캔 · 다음 ${next}초 뒤 · 1분마다`);
-  } else lines.push(scan.busy ? '○ 첫 스캔 중' : `○ 아직 스캔 못 함${scan.error ? ` — ${scan.error}` : ''}`);
+const ROLE_NAME = { all: '모두', heal: '힐', tank: '탱', deal: '딜' };
+
+function tabCounts(kind) {
+  const role = cfg.role || 'all';
+  const posts = scan.last.posts.filter((p) => (p.kind || 'normal') === kind);
+  const c = { total: posts.length, gone: 0, stale: 0, other: 0, open: 0 };
+  for (const p of posts) {
+    if (p.departed) c.gone += 1;
+    else if (p.t && Date.now() - p.t >= 20 * 60 * 1000) c.stale += 1;
+    else if (role !== 'all' && p.roles && p.roles.length && !p.roles.includes(role)) c.other += 1;
+    else c.open += 1;
+  }
+  return c;
+}
+
+function menuItems() {
+  const items = [];
+  for (const p of problems()) items.push({ type: 'info', label: `⚠ ${p}`, warn: true });
+  items.push({ type: 'title', label: `🐳 ${state.src.name} · 망호` });
+  let scanValue;
+  if (scan.paused) scanValue = '숨긴 동안 쉼';
+  else if (scan.okAt) scanValue = `${ago(scan.okAt)} 전 · 다음 ${Math.max(0, Math.round((scan.nextAt - Date.now()) / 1000))}초`;
+  else scanValue = scan.busy ? '첫 스캔 중' : `아직 못 함${scan.error ? ` — ${scan.error}` : ''}`;
+  items.push({ type: 'info', label: '스캔 · 1분마다', value: scanValue });
   if (scan.last) {
-    // per tab, the page's rule: 출항 > 20분 지남 > 직군 다름 (내 직군) > 모집 중
-    const role = cfg.role || 'all';
-    const ROLE_NAME = { all: '모두', heal: '힐', tank: '탱', deal: '딜' };
     for (const [kind, label] of [['normal', '망호'], ['sub', '잠망호']]) {
-      const posts = scan.last.posts.filter((p) => (p.kind || 'normal') === kind);
-      const c = { gone: 0, stale: 0, other: 0, open: 0 };
-      for (const p of posts) {
-        if (p.departed) c.gone += 1;
-        else if (p.t && Date.now() - p.t >= 20 * 60 * 1000) c.stale += 1;
-        else if (role !== 'all' && p.roles && p.roles.length && !p.roles.includes(role)) c.other += 1;
-        else c.open += 1;
-      }
-      lines.push(`${label} ${posts.length}개 · 모집 ${c.open}${role !== 'all' ? ` · 직군 다름 ${c.other}` : ''} · 20분 지남 ${c.stale} · 출항 ${c.gone}`);
+      const c = tabCounts(kind);
+      items.push({ type: 'info', label, value: `모집 ${c.open}${cfg.role && cfg.role !== 'all' ? ` · 직군 다름 ${c.other}` : ''} · 20분+ ${c.stale} · 출항 ${c.gone} / ${c.total}` });
     }
-    lines.push(`내 직군: ${ROLE_NAME[role]} (위젯 왼쪽 위 칩)`);
-    lines.push(`지난 스캔 요청 ${scan.last.requests}회 (목록 1 + 댓글 수가 바뀐 글)`);
   }
   if (game.found) {
     const [, , w, h] = game.rect || [0, 0, 0, 0];
-    lines.push(`게임 창 ${w}×${h} · ${game.minimized ? '최소화됨' : game.front === 'game' ? '앞에 있음' : '뒤에 있음'}`);
+    items.push({ type: 'info', label: '게임 창', value: `${w}×${h} · ${game.minimized ? '최소화' : game.front === 'game' ? '앞' : '뒤'}` });
   } else {
-    lines.push(appMode ? '게임 창 없음 → 창 모드 (게임이 켜지면 오버레이로)' : '게임 창 찾는 중');
+    items.push({ type: 'info', label: '게임 창', value: appMode ? '없음 → 창 모드' : '찾는 중' });
   }
-  return lines;
+  items.push({ type: 'sep' });
+  items.push(...(uui ? uui.menuItems() : []));
+  items.push({ type: 'sep' });
+  items.push({ type: 'item', id: 'scan', label: '지금 스캔', tip: '1분을 기다리지 않고 지금 읽습니다' });
+  items.push({ type: 'item', id: 'open-list', label: '망호 탭 브라우저로 열기' });
+  items.push({ type: 'sep' });
+  if (appMode) items.push({ type: 'item', id: 'minimize', label: '창 최소화' });
+  items.push({ type: 'item', id: 'reset-pos', label: '위치 초기화', tip: '옮기기는 ☰를 끌어서 (가장자리에 붙고 다른 오버레이는 피함)' });
+  items.push({ type: 'segment', id: 'align', label: '정렬', options: [['left', '왼쪽'], ['right', '오른쪽']].map(([id, label]) => ({ id, label, on: cfg.align === id })) });
+  items.push({
+    type: 'segment', id: 'show', label: '표시', tip: '숨기면 트레이 아이콘으로 다시 표시 · 숨긴 동안 스캔도 쉼',
+    options: [['always', '항상'], ['game', '게임 앞'], ['hidden', '숨김']].map(([id, label]) => ({ id, label, on: cfg.show === id })),
+  });
+  items.push({ type: 'toggle', id: 'nick', label: '작성자 닉', on: !!cfg.nick, tip: '제목 옆에 작성자 닉 (제목이 그만큼 짧아짐)' });
+  items.push({
+    type: 'segment', id: 'opacity', label: '투명도',
+    options: [1, 0.9, 0.8, 0.7, 0.6].map((o) => ({ id: String(o), label: String(Math.round(o * 100)), on: Math.abs((cfg.opacity || 1) - o) < 0.01 })),
+  });
+  items.push({ type: 'sep' });
+  items.push({ type: 'item', id: 'notice', label: '이용 안내 보기' });
+  items.push({ type: 'item', id: 'quit', label: '종료' });
+  return items;
 }
 
-function buildMenu() {
-  const radio = (label, checked, click) => ({ label, type: 'radio', checked, click });
-  return Menu.buildFromTemplate([
-    ...syncLines().map((label) => ({ label, enabled: false })),
-    { type: 'separator' },
-    ...(uui ? uui.menuLines() : []),
-    { type: 'separator' },
-    { label: '지금 스캔', click: () => runScan() },
-    { label: '망호 탭 브라우저로 열기', click: () => shell.openExternal(scanner.listUrl(state.src)) },
-    { type: 'separator' },
-    ...(appMode ? [{ label: '창 최소화', click: () => win && win.minimize() }] : []),
-    { label: '위치 초기화 (옮기기: ☰를 끌어서)', click: () => { saveCfg({ ...POS[cfg.align] }); place(); } },
-    {
-      label: '정렬',
-      submenu: [
-        radio('게임 창 왼쪽', cfg.align === 'left', () => setAlign('left')),
-        radio('게임 창 오른쪽', cfg.align === 'right', () => setAlign('right')),
-      ],
-    },
-    {
-      label: '표시',
-      submenu: [
-        radio('항상 위', cfg.show === 'always', () => setShow('always')),
-        radio('게임이 앞에 있을 때만', cfg.show === 'game', () => setShow('game')),
-        radio('숨기기 (트레이 아이콘으로 다시 표시 · 그동안 스캔 쉼)', cfg.show === 'hidden', () => setShow('hidden')),
-      ],
-    },
-    {
-      label: '작성자 닉 표시 (제목이 그만큼 짧아짐)', type: 'checkbox', checked: !!cfg.nick,
-      click: (mi) => { saveCfg({ nick: mi.checked }); toPage(windowState()); },
-    },
-    {
-      label: '투명도',
-      submenu: [1, 0.9, 0.8, 0.7, 0.6, 0.5].map((o) => radio(`${Math.round(o * 100)}%`, Math.abs((cfg.opacity || 1) - o) < 0.01, () => setOpacity(o))),
-    },
-    { type: 'separator' },
-    { label: '이용 안내 보기', click: () => consent.ask({ dir: __dirname, title: NOTICE_TITLE, view: true }) },
-    { label: '종료', click: () => app.quit() },
-    ...CLOSE_ITEM,
-  ]);
+// -> keep the menu open (the line changed in place)?
+function menuAct(id, opt) {
+  if (id.startsWith('upd-')) return uui ? uui.menuAct(id) : false;
+  switch (id) {
+    case 'scan': runScan(); return false;
+    case 'open-list': shell.openExternal(scanner.listUrl(state.src)); return false;
+    case 'minimize': if (win) win.minimize(); return false;
+    case 'reset-pos': saveCfg({ ...POS[cfg.align] }); place(); return false;
+    case 'align': setAlign(opt); return true;
+    case 'show': setShow(opt); return opt !== 'hidden';
+    case 'nick': saveCfg({ nick: !cfg.nick }); toPage(windowState()); return true;
+    case 'opacity': setOpacity(Number(opt)); return true;
+    case 'notice': consent.ask({ dir: __dirname, title: NOTICE_TITLE, mode: 'view' }); return false;
+    case 'quit': app.quit(); return false;
+    default: return false;
+  }
 }
 
-// Every menu ends in "닫기", which does nothing (user 2026-11-27: closing a menu by
-// clicking near it ran an item). While a menu is up, and 300 ms after, the page ignores
-// clicks, so the click that closes it cannot set off what is underneath. Esc closes too.
-const CLOSE_ITEM = [{ type: 'separator' }, { label: '닫기' }];
-function popup(menu) {
+function buildMenu() {                  // the tray's native menu, from the same items
+  return ctxLib.toNative(menuItems(), menuAct);
+}
+
+// While a menu is up, and 300 ms after, the page ignores clicks (renderer.js blocked()).
+let ctx = null;
+function openMenu(build, act) {
   if (!win || win.isDestroyed()) return;
   tipAnchor = null;
   placeTip();
+  if (!ctx) ctx = ctxLib.create({ dir: __dirname });
+  const p = screen.getCursorScreenPoint();
   toPage({ type: 'menu', open: true });
-  menu.popup({ window: win, callback: () => toPage({ type: 'menu', open: false }) });
+  ctx.open({
+    anchor: { x: p.x, y: p.y + 6, right: cfg.align !== 'left', top: p.y - 6 }, zoom, build, act,
+    onClose: () => toPage({ type: 'menu', open: false }),
+  });
 }
 
 function popupMenu() {
-  popup(buildMenu());
+  openMenu(menuItems, menuAct);
 }
 
 function setAlign(a) {
@@ -529,6 +544,65 @@ function createTray() {
   tray.setToolTip('망호 스캐너 — 클릭: 보이기/숨기기 · 우클릭: 메뉴');
   tray.on('click', () => setShow(cfg.show === 'hidden' ? 'always' : 'hidden'));
   tray.on('right-click', () => tray.popUpContextMenu(buildMenu()));
+}
+
+// The README screenshots (MANGHO_DEMO=<dir>): made-up posts from docs/demo-posts.json on a
+// neutral backdrop - no gallery reads, no game window, no real names (the repo is public).
+async function demoShots() {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const save = async (w, name) => fs.writeFileSync(path.join(DEMO, `${name}.png`), (await w.webContents.capturePage()).toPNG());
+  const js = (code) => win.webContents.executeJavaScript(code);
+  fs.mkdirSync(DEMO, { recursive: true });
+  const fx = JSON.parse(fs.readFileSync(path.join(__dirname, 'docs', 'demo-posts.json'), 'utf8'));
+  const now = Date.now();
+  const posts = fx.posts.map((p) => ({
+    roles: null, roleText: null, kindRule: null, kindMatch: null, ip: '', authorLast: null, firstSeen: 0, url: '',
+    ...p, t: now - p.ageMin * 60000, departed: p.departed || null,
+  }));
+  scan.last = { t: now, ms: 0, requests: 1, first: true, posts, commentError: null,
+    source: { name: '에반(마비노기 모바일)', gallery: 'enban', head: 140, keywords: ['출항', '출발'], url: '' } };
+  Object.assign(scan, { okAt: now - 12000, nextAt: now + 48000 });
+  saveCfg({ role: 'deal' });
+  await js("document.body.classList.add('demo')");
+  saveCfg({ width: DEFAULTS.width + 32 });           // the demo's padding (marks) comes on top of the usual width
+  place();
+  toPage({ type: 'window', expanded: true, align: 'right', nick: false, tab: 'normal', role: 'deal' });
+  toPage({ type: 'snapshot', ...scan.last });
+  await wait(900);
+  // ① tabs ② 내 직군 ③ ☰ ④ a fresh line ⑤ 직군 다름 ⑥ 출항 ⑦ the height line
+  await js(`window.__marks([['.tab[data-kind=normal]', 1, 'top'], ['#role', 2, 'top'], ['#menu', 3, 'top'],
+    ['.post', 4], ['.post.rolex', 5], ['.post.gone', 6], ['#sizer', 7]])`);
+  await wait(400);
+  await save(win, 'overview');
+  await js('window.__marks([])');
+  await js("window.__setTab('sub')");
+  await wait(500);
+  await save(win, 'sub-tab');
+  await js("window.__setTab('normal')");
+  await wait(400);
+  if (await js("window.__tipTest('.post.rolex')")) { await wait(700); await save(tipWin, 'tooltip'); }
+  tipAnchor = null;
+  placeTip();
+  popupMenu();
+  await wait(1200);
+  await save(ctx.window(), 'menu');
+  ctx.close();
+  await wait(300);
+  win.webContents.send('feed', { type: 'menu', open: false });
+  ipcMain.emit('ui', { sender: win.webContents }, 'role-menu');
+  await wait(800);
+  await save(ctx.window(), 'menu-role');
+  ctx.close();
+  await js("window.__pill('새로운 업데이트가 있습니다! (v9.9.0)')");
+  await wait(400);
+  await save(win, 'update-pill');
+  await uui.demo(path.join(DEMO, 'update'));
+  for (const f of fs.readdirSync(DEMO)) {             // keep the steps the README shows
+    if (f.startsWith('update-') && !['update-available.png', 'update-downloading.png', 'update-pill.png'].includes(f)) fs.rmSync(path.join(DEMO, f));
+  }
+  process.env.NOTICE_SHOT = path.join(DEMO, 'notice.png');
+  await consent.ask({ dir: __dirname, title: NOTICE_TITLE });
+  app.quit();
 }
 
 function takeShots() {
@@ -645,15 +719,15 @@ ipcMain.on('ui', (_e, action, arg) => {
     saveCfg({ maxH: arg == null ? null : Math.max(80, Math.round(Number(arg) || 0)) });
     place();
   } else if (action === 'role-menu') {
-    // 내 직군 badge: pick from a menu at the badge (same native menu as ☰)
-    const pick = (r) => { saveCfg({ role: r }); toPage(windowState()); };
-    popup(Menu.buildFromTemplate([
-      { label: '내 직군 — 찾는 직군이 다른 글은 보라색 · 모집 중에서 뺌', enabled: false },
-      { type: 'separator' },
-      ...[['all', '모두 (거르지 않음)'], ['heal', '힐'], ['tank', '탱'], ['deal', '딜']].map(([r, label]) => (
-        { label, type: 'radio', checked: (cfg.role || 'all') === r, click: () => pick(r) })),
-      ...CLOSE_ITEM,
-    ]));
+    // 내 직군 badge: one line of choices in the same menu as ☰
+    openMenu(() => [
+      { type: 'title', label: '내 직군' },
+      {
+        type: 'segment', id: 'role', label: '직군', tip: '찾는 직군(랏힐 · 힐러구함 …)에 내 직군이 없는 글은 보라색, 모집 중에서 뺌',
+        options: ['all', 'heal', 'tank', 'deal'].map((r) => ({ id: r, label: ROLE_NAME[r], on: (cfg.role || 'all') === r })),
+      },
+      { type: 'info', label: '모두 = 거르지 않음 · 숫자만 있는 랏1·표기 없음 = 누구나' },
+    ], (id, r) => { if (id === 'role') { saveCfg({ role: r }); toPage(windowState()); } return false; });
   } else if (action === 'open') {
     // only a post from the last scan, by number - the page never hands over a URL
     const p = scan.last && scan.last.posts.find((x) => x.no === Number(arg));
@@ -674,7 +748,7 @@ if (!app.requestSingleInstanceLock()) {
     uui = makeUpdateUi();
     if (process.env.UPDATE_DEMO) { await uui.demo(process.env.UPDATE_DEMO); app.quit(); return; }
     const noticeV = consent.noticeVersion(__dirname);
-    if (!SHOT && (cfg.notice || 0) < noticeV) {
+    if (!SHOT && !DEMO && (cfg.notice || 0) < noticeV) {
       // first run, or this version's notice is newer than the agreed one (e.g. a zip put over
       // by hand): ask before anything starts; with the old version kept aside, offer going back
       const guard = app.isPackaged && uui.hasPrevious();
@@ -689,13 +763,14 @@ if (!app.requestSingleInstanceLock()) {
     starting = false;                  // from here, closing the last window quits
     createTipWindow();
     dock = dockLib.create({
-      win, name: SHOT ? 'mangho-scanner-shot' : 'mangho-scanner', title: '망호 스캐너',
+      win, name: SHOT ? 'mangho-scanner-shot' : DEMO ? 'mangho-scanner-demo' : 'mangho-scanner', title: '망호 스캐너',
       gameRect: gameRectDip, appMode: () => appMode,
       cursor: () => screen.getCursorScreenPoint(),
       onState: (s) => toPage({ type: 'movemode', ...s }),
       onDrop,
     });
     setInterval(() => { if (win && !win.isDestroyed() && !appMode && win.isVisible()) dock.publish(win.getBounds()); }, 5000);
+    if (DEMO) { setTimeout(demoShots, 1500); return; }
     startTracker();
     runScan();
     if (!SHOT) {

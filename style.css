@@ -148,3 +148,11 @@ body.app #modepill { display: inline-block; }
 body.app #root { background: rgba(18, 21, 27, .97); border: 1px solid rgba(255,255,255,.12); border-radius: 10px; padding: 4px 6px 6px; }
 body.app .head { -webkit-app-region: drag; width: 100%; }
 body.app .head .hit { -webkit-app-region: no-drag; }
+
+/* README screenshots (main.js demoShots): a neutral backdrop instead of the game, room for the marks */
+body.demo { background: linear-gradient(160deg, #4a5566, #2b313b); }
+body.demo #root { padding: 20px 8px 8px 24px; }
+.mark {
+  position: fixed; width: 16px; height: 16px; border-radius: 50%; background: #ffd34a; color: #1a1408;
+  font: 700 10.5px/16px "Segoe UI", sans-serif; text-align: center; box-shadow: 0 0 0 1.5px rgba(0,0,0,.55); z-index: 9;
+}

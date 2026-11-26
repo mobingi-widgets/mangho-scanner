@@ -135,6 +135,10 @@ def main(argv):
     os.makedirs(build)
     app = build_app(build)
     docs = [(os.path.join(HERE, d), os.path.join(NAME, d)) for d in ("README.md", "CHANGELOG.md")]
+    # the README's pictures beside it (not in the program itself)
+    img = os.path.join(HERE, "docs", "img")
+    if os.path.isdir(img):
+        docs += [(os.path.join(img, n), os.path.join(NAME, "docs", "img", n)) for n in sorted(os.listdir(img)) if n.endswith(".png")]
 
     if not release:
         out = os.path.join(out_root, "%s %s.zip" % (NAME, ver))
