@@ -42,6 +42,7 @@ function makeUpdateUi() {
     cfg: () => cfg, saveCfg, near: () => gameRectDip(),
     page: (m) => toPage(m),
     quit: () => app.quit(),
+    zoom: () => zoom,                  // the update window reads at the overlay's text size
   });
 }
 
@@ -52,7 +53,13 @@ const REF_GAME_HEIGHT = 680;     // DIP height the CSS sizes were set for; large
 // tracker (it reaches ~35% with five quests) and left of the column of context
 // buttons on the right edge (gather / ASSIST, ~80 DIP wide), so it never covers them.
 const POS = { left: { dx: 8, fy: 0.24 }, right: { dx: 88, fy: 0.37 } };
-const DEFAULTS = { width: 250, align: 'right', ...POS.right, show: 'always', opacity: 1, expanded: true, nick: false, tab: 'normal', role: 'all', v: 1 };
+const DEFAULTS = { width: 250, align: 'right', ...POS.right, show: 'always', opacity: 1, expanded: true, nickMode: 'off', tab: 'normal', role: 'all', font: 'mid', v: 1 };
+// 작성자 칸 (user 2026-11-27): off | nick | code = 닉(식별코드) | dup = code only for a nick seen twice
+const NICK_MODES = ['off', 'nick', 'code', 'dup'];
+// 글자 작게/중간/크게 (user 2026-11-27): times the zoom that follows the game window's size;
+// everything of this program takes it (overlay, tooltip, menu, update window, notice)
+const FONT_SCALE = { small: 0.85, mid: 1, large: 1.2 };
+const WIDTH_MAX_OF_GAME = 0.4;   // the width bar stops at 40% of the game window
 
 let win = null;
 let tray = null;
@@ -73,7 +80,13 @@ let cfg = DEFAULTS;
 function loadCfg() {
   let saved = {};
   try { saved = JSON.parse(fs.readFileSync(CFG_PATH(), 'utf8')); } catch { /* first run */ }
-  return { ...DEFAULTS, ...saved, v: DEFAULTS.v };
+  const c = { ...DEFAULTS, ...saved, v: DEFAULTS.v };
+  // 1.4.0 and before: 작성자 닉 on/off -> 겹칠 때 (the nick, a code when it repeats) / 끔
+  if (!saved.nickMode && 'nick' in saved) c.nickMode = saved.nick ? 'dup' : 'off';
+  if (!NICK_MODES.includes(c.nickMode)) c.nickMode = 'off';
+  if (!FONT_SCALE[c.font]) c.font = 'mid';
+  delete c.nick;
+  return c;
 }
 function saveCfg(patch) {
   cfg = { ...cfg, ...patch };
@@ -111,7 +124,7 @@ async function runScan() {
   const started = Date.now();
   try {
     const snap = await scanner.scan(state);
-    Object.assign(scan, { last: snap, okAt: Date.now(), fails: 0, error: snap.commentError ? `댓글 — ${snap.commentError}` : '' });
+    Object.assign(scan, { last: snap, okAt: Date.now(), fails: 0, error: snap.commentError ? `댓글 — ${snap.commentError}` : snap.bodyError ? `본문 — ${snap.bodyError}` : '' });
     toPage({ type: 'snapshot', ...snap });
     if (SHOT && !shotDone) takeShots();
   } catch (e) {
@@ -260,6 +273,28 @@ function checkMode() {
   if (Date.now() - lostSince >= APP_AFTER_MS) setMode(true);
 }
 
+// ------------------------------------------------------------- width bar
+// The edge away from the anchored side (user 2026-11-27): docked right -> the left edge,
+// docked left -> the right edge; a plain window grows to the right.
+const widthSide = () => (appMode || cfg.align === 'left' ? 'right' : 'left');
+function widthDrag(on, min) {
+  if (!dock) return;
+  if (!on) { dock.widthEnd(); return; }
+  const g = gameRectDip();
+  const max = g ? Math.floor((g.width * WIDTH_MAX_OF_GAME) / zoom) : 640;
+  tipAnchor = null;
+  placeTip();
+  dock.widthStart({
+    side: widthSide(), zoom, min: Math.max(160, Math.ceil(min || 0)), max: Math.max(DEFAULTS.width, max),
+    onWidth: (w, done) => {
+      cfg.width = w;                       // live; kept when let go
+      place();
+      toPage({ type: 'width', width: w, live: !done });
+      if (done) { saveCfg({ width: w }); sizing = false; }
+    },
+  });
+}
+
 function raise() {
   if (!win || win.isDestroyed() || !win.isVisible() || appMode) return;
   if (ctx && ctx.isOpen()) return;       // the menu (and its click catcher) stay on top while it is up
@@ -270,7 +305,7 @@ function raise() {
 function place() {
   if (!win || win.isDestroyed() || isDragging()) return;
   const g = gameRectDip();
-  const z = g ? Math.max(0.75, Math.min(1.6, g.height / REF_GAME_HEIGHT)) : 1;
+  const z = (g ? Math.max(0.75, Math.min(1.6, g.height / REF_GAME_HEIGHT)) : 1) * (FONT_SCALE[cfg.font] || 1);
   if (Math.abs(z - zoom) > 0.01) {
     zoom = z;
     win.webContents.setZoomFactor(zoom);
@@ -334,7 +369,9 @@ function onDrop(r) {
 }
 
 function windowState() {
-  return { type: 'window', expanded: !!cfg.expanded, align: cfg.align, nick: !!cfg.nick, tab: cfg.tab, role: cfg.role };
+  // the width bar sits on the edge away from the anchored side (in a plain window: the right)
+  return { type: 'window', expanded: !!cfg.expanded, align: cfg.align, nickMode: cfg.nickMode, tab: cfg.tab, role: cfg.role,
+    wside: widthSide(), width: cfg.width, defWidth: DEFAULTS.width };
 }
 
 // ------------------------------------------------------------ window tracker
@@ -436,7 +473,15 @@ function menuItems() {
     type: 'segment', id: 'show', label: '표시', tip: '숨기면 트레이 아이콘으로 다시 표시 · 숨긴 동안 스캔도 쉼',
     options: [['always', '항상'], ['game', '게임 앞'], ['hidden', '숨김']].map(([id, label]) => ({ id, label, on: cfg.show === id })),
   });
-  items.push({ type: 'toggle', id: 'nick', label: '작성자 닉', on: !!cfg.nick, tip: '제목 옆에 작성자 닉 (제목이 그만큼 짧아짐)' });
+  items.push({
+    type: 'segment', id: 'nickmode', label: '작성자',
+    tip: '제목 옆 작성자 칸. 코드 = 회원 아이디 / 유동 IP 앞자리 · 겹칠 때 = 같은 닉이 둘 이상일 때만 코드',
+    options: [['off', '끔'], ['nick', '닉'], ['code', '닉+코드'], ['dup', '겹칠 때']].map(([id, label]) => ({ id, label, on: cfg.nickMode === id })),
+  });
+  items.push({
+    type: 'segment', id: 'font', label: '글자', tip: '오버레이·툴팁·메뉴·업데이트 창·이용 안내의 글자 크기 (게임 창 크기에 맞춘 배율 위에)',
+    options: [['small', '작게'], ['mid', '중간'], ['large', '크게']].map(([id, label]) => ({ id, label, on: cfg.font === id })),
+  });
   items.push({
     type: 'segment', id: 'opacity', label: '투명도',
     options: [1, 0.9, 0.8, 0.7, 0.6].map((o) => ({ id: String(o), label: String(Math.round(o * 100)), on: Math.abs((cfg.opacity || 1) - o) < 0.01 })),
@@ -457,9 +502,10 @@ function menuAct(id, opt) {
     case 'reset-pos': saveCfg({ ...POS[cfg.align] }); place(); return false;
     case 'align': setAlign(opt); return true;
     case 'show': setShow(opt); return opt !== 'hidden';
-    case 'nick': saveCfg({ nick: !cfg.nick }); toPage(windowState()); return true;
+    case 'nickmode': if (NICK_MODES.includes(opt)) { saveCfg({ nickMode: opt }); toPage(windowState()); } return true;
+    case 'font': if (FONT_SCALE[opt]) { saveCfg({ font: opt }); place(); } return false;   // the menu itself changes size
     case 'opacity': setOpacity(Number(opt)); return true;
-    case 'notice': consent.ask({ dir: __dirname, title: NOTICE_TITLE, mode: 'view' }); return false;
+    case 'notice': consent.ask({ dir: __dirname, title: NOTICE_TITLE, mode: 'view', zoom }); return false;
     case 'quit': app.quit(); return false;
     default: return false;
   }
@@ -558,20 +604,23 @@ async function demoShots() {
   const posts = fx.posts.map((p) => ({
     roles: null, roleText: null, kindRule: null, kindMatch: null, ip: '', authorLast: null, firstSeen: 0, url: '',
     ...p, t: now - p.ageMin * 60000, departed: p.departed || null,
+    until: p.untilMin ? now + p.untilMin * 60000 : now - p.ageMin * 60000 + 3600000, untilFrom: p.untilFrom || 'default',
   }));
-  scan.last = { t: now, ms: 0, requests: 1, first: true, posts, commentError: null,
+  scan.last = { t: now, ms: 0, requests: 6, first: true, posts, commentError: null,
     source: { name: '에반(마비노기 모바일)', gallery: 'enban', head: 140, keywords: ['출항', '출발'], url: '' } };
   Object.assign(scan, { okAt: now - 12000, nextAt: now + 48000 });
   saveCfg({ role: 'deal' });
   await js("document.body.classList.add('demo')");
   saveCfg({ width: DEFAULTS.width + 32 });           // the demo's padding (marks) comes on top of the usual width
   place();
-  toPage({ type: 'window', expanded: true, align: 'right', nick: false, tab: 'normal', role: 'deal' });
+  const demoWindow = (extra) => toPage({ type: 'window', expanded: true, align: 'right', nickMode: 'off', tab: 'normal', role: 'deal',
+    wside: 'left', width: cfg.width, defWidth: DEFAULTS.width, ...extra });
+  demoWindow();
   toPage({ type: 'snapshot', ...scan.last });
   await wait(900);
-  // ① tabs ② 내 직군 ③ ☰ ④ a fresh line ⑤ 직군 다름 ⑥ 출항 ⑦ the height line
+  // ① tabs ② 내 직군 ③ ☰ ④ a fresh line ⑤ 직군 다름 ⑥ 출항 ⑦ the height line ⑧ a password (🔒)
   await js(`window.__marks([['.tab[data-kind=normal]', 1, 'top'], ['#role', 2, 'top'], ['#menu', 3, 'top'],
-    ['.post', 4], ['.post.rolex', 5], ['.post.gone', 6], ['#sizer', 7]])`);
+    ['.post', 4], ['.post.rolex', 5], ['.post.gone', 6], ['#sizer', 7], ['.post:has(.lock) ~ .post:has(.lock)', 8]])`);
   await wait(400);
   await save(win, 'overview');
   await js('window.__marks([])');
@@ -580,7 +629,32 @@ async function demoShots() {
   await save(win, 'sub-tab');
   await js("window.__setTab('normal')");
   await wait(400);
+  // 작성자 = 겹칠 때 on a wider overlay (the width bar), its live label showing
+  saveCfg({ width: 372 });
+  place();
+  demoWindow({ nickMode: 'dup', width: 372 });
+  toPage({ type: 'width', width: 340, live: true });
+  await wait(700);
+  await js("document.body.classList.add('wsizing')");
+  await wait(250);
+  await save(win, 'nick-width');
+  await js("document.body.classList.remove('wsizing')");
+  toPage({ type: 'width', width: 340, live: false });
+  // 글자 크게 (x1.2): the whole overlay grows with it
+  saveCfg({ width: DEFAULTS.width + 32, font: 'large' });
+  place();
+  demoWindow();
+  await wait(700);
+  await save(win, 'font-large');
+  saveCfg({ font: 'mid' });
+  place();
+  await wait(600);
   if (await js("window.__tipTest('.post.rolex')")) { await wait(700); await save(tipWin, 'tooltip'); }
+  tipAnchor = null;
+  placeTip();
+  await wait(300);
+  // a line with a password: the tooltip shows it first
+  if (await js("window.__tipTest('.post:has(.lock):not(.rolex):not(.gone)')")) { await wait(700); await save(tipWin, 'tooltip-pw'); }
   tipAnchor = null;
   placeTip();
   popupMenu();
@@ -714,6 +788,14 @@ ipcMain.on('ui', (_e, action, arg) => {
     saveCfg({ tab: arg === 'sub' ? 'sub' : 'normal' });
   } else if (action === 'sizing') {
     sizing = !!arg;                    // the bottom line is being dragged: keep taking the mouse
+  } else if (action === 'width-drag') {
+    // the side bar: arg = { on, min (CSS px the header needs) }
+    sizing = !!(arg && arg.on);
+    widthDrag(!!(arg && arg.on), arg && arg.min);
+  } else if (action === 'width-reset') {
+    saveCfg({ width: DEFAULTS.width });
+    place();
+    toPage({ type: 'width', width: cfg.width, live: false });
   } else if (action === 'maxh') {
     // the bottom line was let go: the overlay's height limit (CSS px); null = none
     saveCfg({ maxH: arg == null ? null : Math.max(80, Math.round(Number(arg) || 0)) });
@@ -754,7 +836,7 @@ if (!app.requestSingleInstanceLock()) {
       const guard = app.isPackaged && uui.hasPrevious();
       // started fine (an update waiting on update-ok.json must not roll back while the notice is read)
       const onShown = () => updater.markHealthy(path.join(app.getPath('userData'), 'update-ok.json'), app.getVersion());
-      const answer = await consent.ask({ dir: __dirname, title: NOTICE_TITLE, mode: guard ? 'guard' : 'ask', onShown });
+      const answer = await consent.ask({ dir: __dirname, title: NOTICE_TITLE, mode: guard ? 'guard' : 'ask', onShown, zoom: FONT_SCALE[cfg.font] || 1 });
       if (answer === 'rollback') { uui.rollback(); return; }
       if (answer !== true) { app.quit(); return; }
       saveCfg({ notice: noticeV, noticeAt: new Date().toISOString(), noticeDeclined: null });

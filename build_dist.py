@@ -107,7 +107,8 @@ def build_app(build):
             os.remove(os.path.join(loc, n))
     shutil.rmtree(os.path.join(app, "resources", "app", "node_modules"), ignore_errors=True)
     for need in (NAME + ".exe", os.path.join("resources", "app", "gamewin.ps1"), os.path.join("resources", "app", "main.js"),
-                 os.path.join("resources", "app", "updater.js"), os.path.join("resources", "app", "apply-update.ps1")):
+                 os.path.join("resources", "app", "updater.js"), os.path.join("resources", "app", "blake2b.js"),
+                 os.path.join("resources", "app", "apply-update.ps1")):
         if not os.path.exists(os.path.join(app, need)):
             raise SystemExit("빌드 결과에 %s 없음: %s" % (need, app))
     return app
@@ -147,6 +148,20 @@ def zip_tree(out, root, prefix="", extra=()):
 def asset(path):
     data = open(path, "rb").read()
     return {"name": os.path.basename(path), "size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+
+
+def electron_selftest(files):
+    """Check every new signature with the updater as the app runs it - inside Electron, whose
+    crypto (BoringSSL) is not node's (1.4.0 shipped an updater that could not hash BLAKE2b there).
+    -> (ok, output)"""
+    exe = os.path.join(HERE, "node_modules", "electron", "dist", "electron.exe")
+    js = ("const u = require(process.argv[1]), fs = require('fs'), p = require('path');"
+          "for (const f of process.argv.slice(2)) u.verifyMinisig(fs.readFileSync(f), fs.readFileSync(f + '.minisig', 'utf8'), p.basename(f));"
+          "console.log('verified ' + (process.argv.length - 2) + ' in electron ' + process.versions.electron)")
+    run = subprocess.run([exe, "-e", js, os.path.join(HERE, "updater.js"), *files], capture_output=True, text=True,
+                         encoding="utf-8", env=dict(os.environ, ELECTRON_RUN_AS_NODE="1"))
+    out = (run.stdout + run.stderr).strip()
+    return run.returncode == 0 and "verified" in run.stdout, out[-800:]
 
 
 def main(argv):
@@ -210,6 +225,11 @@ def main(argv):
     if sign.returncode != 0:
         print("서명 실패:\n" + sign.stderr[-1000:])
         return 1
+    ok, out = electron_selftest([appzip, full, notice, latest])
+    if not ok:
+        print("Electron 안에서 서명 확인 실패 — 앱이 이 릴리스를 받을 수 없음, 게시하지 말 것:\n" + out)
+        return 1
+    print("  " + out.splitlines()[-1])
     for n in sorted(os.listdir(rel)):
         print("  %-40s %10.1f KB" % (n, os.path.getsize(os.path.join(rel, n)) / 1e3))
     print(rel)

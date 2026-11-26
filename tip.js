@@ -40,6 +40,12 @@ window.mangho.onFeed((d) => {
   render(d.model);
   // measured at once (getBoundingClientRect lays the page out): an animation frame may
   // never come while this window sits at opacity 0, and then the tooltip never showed
+  report();
+});
+function report() {
   const r = box.getBoundingClientRect();
   window.mangho.tip('size', { seq, w: Math.ceil(r.width) + 2, h: Math.ceil(r.height) + 2 });
-});
+}
+// and again whenever the box changes size after that - a font that arrives late (the emoji
+// font) re-wraps the text, and the window kept the first size: the last lines were cut off
+new ResizeObserver(() => { if (seq) report(); }).observe(box);

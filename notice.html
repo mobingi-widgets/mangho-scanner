@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="notice-version" content="1">
+<meta name="notice-version" content="2">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'">
 <title>망호 스캐너 — 이용 안내</title>
 <link rel="stylesheet" href="notice.css">
@@ -21,8 +21,9 @@
 
   <h2>하는 일</h2>
   <ul>
-    <li>디시인사이드 <b>에반(마비노기 모바일) 갤러리의 🐳 망호 말머리</b> 목록(누구나 볼 수 있는 공개 페이지)을 <b>1분마다</b> 읽어 게임 창 위에 보여 줍니다.</li>
-    <li>"출항" 여부를 보려고, 댓글 수가 바뀐 글의 댓글만 읽습니다.</li>
+    <li>디시인사이드 <b>에반(마비노기 모바일) 갤러리의 🐳 망호 말머리</b> 목록 첫 페이지(누구나 볼 수 있는 공개 페이지)를 <b>1분마다</b> 읽어 게임 창 위에 보여 줍니다.</li>
+    <li>보여 주는 글은 <b>아직 모집 중일 만한 글만</b>입니다: 일반 망호는 올라온 지 1시간 안, 잠수함 망호는 제목에 적힌 끝 시각까지(없으면 8시간). 그보다 오래된 글은 보이지 않고 아무것도 더 읽지 않습니다.</li>
+    <li>보여 주는 글마다 <b>글 본문을 한 번</b> 읽어 파티 <b>암호</b>를 찾고(줄에 🔒, 마우스를 올리면 암호), "출항" 여부와 바뀐 암호를 보려고 <b>댓글 수가 바뀐 글의 댓글만</b> 읽습니다.</li>
     <li>로그인하지 않으며, 글·댓글을 쓰거나 추천하지 않습니다. 스캐너를 숨긴 동안에는 읽지 않습니다.</li>
   </ul>
 
@@ -43,12 +44,12 @@
         <li>업데이트 기록 — <code>%APPDATA%\mangho-scanner\update.log</code></li>
       </ul>
     </li>
-    <li>갤러리 글·댓글은 화면에 보여 주는 동안 메모리에만 두고 파일로 남기지 않습니다.</li>
+    <li>갤러리 글·본문·댓글(찾은 암호 포함)은 화면에 보여 주는 동안 메모리에만 두고 파일로 남기지 않습니다.</li>
   </ul>
 
   <h2>접속하는 곳</h2>
   <ul>
-    <li><code>gall.dcinside.com</code> — 망호 목록·댓글 (브라우저로 여는 것과 같은 공개 페이지 요청)</li>
+    <li><code>gall.dcinside.com</code> — 망호 목록·글 본문·댓글 (브라우저로 여는 것과 같은 공개 페이지 요청)</li>
     <li><code>github.com</code> (내려받기는 <code>release-assets.githubusercontent.com</code> 등) — 새 버전 확인(켤 때·6시간마다)과, 직접 설치를 고를 때의 내려받기</li>
     <li>이 밖으로는 연결하지 않습니다. 목록의 글을 클릭하면 기본 브라우저가 그 글을 엽니다.</li>
   </ul>
@@ -64,7 +65,7 @@
   </ul>
 </main>
 <footer>
-  <span class="ver">이용 안내 1판 · 2026-11-27</span>
+  <span class="ver">이용 안내 2판 · 2026-11-27</span>
   <span id="buttons"></span>
 </footer>
 <script src="notice.js"></script>

@@ -6,7 +6,10 @@
   --soft: #e7e3da;
   --dim: #7d7973;            /* departed */
   --stale: #a7b0bd;          /* 20분+ without a departure: lighter, cooler than departed */
-  --other: #a58be6;          /* 직군 다름: the 랏 asks for another role than mine */
+  /* 직군 다름: the 랏 asks for another role than mine. Out of the count, so it must not catch
+     the eye (user 2026-11-27: #a58be6 was too vivid) - a grey with a hint of violet, apart from
+     --dim (warm) and --stale (cool blue) */
+  --other: #958ea3;
   --yellow: #ffd34a;
   --orange: #ff9a3c;
   --green: #4fd68f;
@@ -25,7 +28,7 @@ body {
   user-select: none;
   -webkit-font-smoothing: antialiased;
 }
-#root { padding: 2px 0 4px; display: flex; flex-direction: column; align-items: flex-end; }
+#root { position: relative; padding: 2px 0 4px; display: flex; flex-direction: column; align-items: flex-end; }
 .pill, .panel {
   text-shadow: -1px -1px 0 rgba(0,0,0,.75), 1px -1px 0 rgba(0,0,0,.75), -1px 1px 0 rgba(0,0,0,.75),
                1px 1px 0 rgba(0,0,0,.75), 0 0 4px rgba(0,0,0,.6);
@@ -96,9 +99,32 @@ body.tab-sub .panel { border-top-color: var(--subpill); }
 .post { cursor: pointer; color: var(--white); }
 .post + .post { border-top: 1px solid rgba(255,255,255,.05); }
 .post:hover { background: rgba(255,255,255,.10); }
-.ttl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.nick { flex: none; display: none; max-width: 58px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; opacity: .8; }
-body.show-nick .nick { display: block; }
+/* title cell: kind icon · title · (padlock). Only the title text gives way ("…"); the icons
+   keep their size, so the padlock stays visible right after a cut title (user 2026-11-27) */
+.ttl { flex: 1; min-width: 0; display: flex; align-items: center; overflow: hidden; white-space: nowrap; }
+.ttl .tt { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 작성자 칸: nick + a small code (account id / IP prefix). Only the nick gives way (…); a wider
+   overlay (the width bar) gives this column a third of the extra width, the title the rest */
+.nick { flex: 0 1 auto; display: none; align-items: baseline; min-width: 0; max-width: calc(64px + (100vw - 250px) * .35);
+  white-space: nowrap; font-size: 10.5px; opacity: .8; }
+body.show-nick .nick { display: flex; }
+.nick .nn { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nick .code { flex: none; margin-left: 2px; font-size: 9px; opacity: .7; font-weight: 400; }
+.code .mm { display: inline-block; width: 5px; height: 5px; border-radius: 50%; margin-right: 2px; vertical-align: 1px; }
+.code.fixed .mm { background: currentColor; }                      /* 고닉 */
+.code.semi .mm { box-shadow: inset 0 0 0 1px currentColor; }       /* 반고닉 */
+
+/* the width bar (user 2026-11-27): the edge away from the anchored side; unseen until hovered */
+#wsizer { position: absolute; top: 0; bottom: 0; width: 7px; cursor: ew-resize; touch-action: none; z-index: 3; }
+body.wbar-left #wsizer { left: 0; }
+body.wbar-right #wsizer { right: 0; }
+#wsizer::after { content: ''; position: absolute; top: 50%; width: 3px; height: 44px; margin-top: -22px; border-radius: 2px; background: transparent; }
+body.wbar-left #wsizer::after { left: 2px; }
+body.wbar-right #wsizer::after { right: 2px; }
+#wsizer:hover::after, body.wsizing #wsizer::after { background: var(--yellow); box-shadow: 0 0 0 1px rgba(0,0,0,.35); }
+#wlabel { position: absolute; top: 24px; z-index: 4; padding: 1px 6px; border-radius: 4px; background: rgba(0,0,0,.82); color: #fff; font-size: 10.5px; white-space: nowrap; pointer-events: none; }
+body.wbar-left #wlabel { left: 10px; }
+body.wbar-right #wlabel { right: 10px; }
 .age { flex: none; width: 50px; text-align: right; font-size: 10.5px; white-space: nowrap; }
 /* not departed yet, by the post's age (user 2026-11-27): <5분 white, 5분 yellow,
    10분 orange, 20분 a cooler grey; departed (출항) the plain, darker grey */
@@ -118,6 +144,11 @@ body.show-nick .nick { display: block; }
 .kicon.normal { --ic: #5fb4ff; --ic2: #b4e0ff; }
 .kicon.sub { --ic: #ffc64a; --ic2: #ffe08f; }
 .post.gone .kicon, .post.a20 .kicon, .post.rolex .kicon { --ic: currentColor; --ic2: currentColor; }
+/* padlock after the title (암호 걸린 망호): brass while counted, the line's colour otherwise */
+.lock { width: 10px; height: 12px; flex: none; margin-left: 3px; filter: drop-shadow(0 0 1px rgba(0,0,0,.9)); --ic: #f2b84b; --ic2: #ffe2a3; }
+.lock .body { fill: var(--ic); fill-rule: evenodd; }
+.lock .line { fill: none; stroke: var(--ic2); stroke-width: 1.6; stroke-linecap: round; }
+.post.gone .lock, .post.a20 .lock, .post.rolex .lock { --ic: currentColor; --ic2: currentColor; }
 
 /* 내 직군 chip (first in the header): 모 = no filter; a chosen role is teal */
 .pill.role { cursor: pointer; padding: 0 6px; color: var(--soft); }

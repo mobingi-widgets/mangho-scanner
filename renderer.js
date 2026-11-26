@@ -11,6 +11,8 @@ let problems = [];
 let busy = false;
 let tab = 'normal';
 const KIND = { normal: '일반 망호', sub: '잠수함 망호' };
+// what each tab shows (scanner.js liveUntil; user 2026-11-27: after an hour no 망호 is alive)
+const LIVE_TEXT = { normal: '올라온 지 1시간 안', sub: '제목의 끝 시각까지 · 없으면 8시간' };
 // 내 직군 (user 2026-11-27): a post whose "랏" asks only for other roles is not for me -
 // its own colour (purple, icon too) and out of the 모집 중 count. 모두 = no filter.
 let role = 'all';
@@ -59,6 +61,50 @@ function svgIcon(kind) {
   return svg;
 }
 
+// the party has a password (암호): a padlock right after the title, never cut off by the
+// title's "…" (user 2026-11-27). Same colour rule as the kind icon.
+function lockIcon() {
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 14 16');
+  svg.setAttribute('class', 'lock');
+  const shackle = document.createElementNS(NS, 'path');
+  shackle.setAttribute('d', 'M3.8 7.2V5A3.2 3.2 0 0 1 10.2 5V7.2');
+  shackle.setAttribute('class', 'line');
+  const body = document.createElementNS(NS, 'path');
+  // the body with a keyhole cut out
+  body.setAttribute('d', 'M2.6 7H11.4C12.2 7 12.8 7.6 12.8 8.4V13.6C12.8 14.4 12.2 15 11.4 15H2.6' +
+    'C1.8 15 1.2 14.4 1.2 13.6V8.4C1.2 7.6 1.8 7 2.6 7Z M7 9.3a1.2 1.2 0 0 0 -0.6 2.25V13H7.6V11.55A1.2 1.2 0 0 0 7 9.3Z');
+  body.setAttribute('class', 'body');
+  svg.append(shackle, body);
+  return svg;
+}
+
+// ------------------------------------------------------------------ author
+// "닉네임(식별코드)" (user 2026-11-27): the code tells writers with the same nick apart -
+// a member's account id (고닉 / 반고닉), a 유동's IP prefix (shared by many: weaker).
+// In the narrow column the nick gives way ("…") and the code stays. 고닉 = filled dot,
+// 반고닉 = hollow dot, 유동 = none.
+let nickMode = 'off';
+const MEMBER = { fixed: '고닉', semi: '반고닉', guest: '유동' };
+const memberOf = (p) => p.member || (p.uid ? 'semi' : 'guest');
+function codeOf(p, short) {
+  const c = p.uid || p.ip || '';
+  return short && c.length > 8 ? c.slice(0, 7) + '…' : c;
+}
+function nickCell(p, withCode) {
+  const cell = el('span', 'nick');
+  cell.append(el('span', 'nn', p.nick));
+  const code = withCode ? codeOf(p, true) : '';
+  if (code) {
+    const m = memberOf(p);
+    const c = el('span', `code ${m}`);
+    if (m !== 'guest') c.append(el('span', 'mm'));
+    c.append(document.createTextNode(code));
+    cell.append(c);
+  }
+  return cell;
+}
+
 // --------------------------------------------------------------- age, state
 const MIN = 60 * 1000;
 function ageText(ms) {
@@ -93,6 +139,14 @@ function hhmm(t) {
   const d = new Date(t);
   return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
 }
+// "08:00", or "내일 08:00" when it is not today
+function dayHhmm(t) {
+  const d = new Date(t);
+  const today = new Date();
+  const same = d.toDateString() === today.toDateString();
+  const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1).toDateString() === d.toDateString();
+  return (same ? '' : tomorrow ? '내일 ' : `${d.getMonth() + 1}/${d.getDate()} `) + hhmm(t);
+}
 // "11.27 00:46:24" -> "00:46"
 const cmtTime = (at) => (at ? String(at).replace(/^\d\d\.\d\d /, '').slice(0, 5) : '');
 function said(c) {
@@ -104,13 +158,19 @@ function said(c) {
 
 function postModel(p) {
   const now = Date.now();
-  const writer = p.uid ? p.nick : `${p.nick}${p.ip ? ` (${p.ip})` : ''}`;
-  const rows = [
+  const code = codeOf(p, false);
+  const writer = `${p.nick}${code ? `(${code})` : ''} · ${MEMBER[memberOf(p)]}`;
+  const rows = [];
+  // the party password first: the line is opened to read it (user 2026-11-27)
+  if (p.pw && p.pw.value) rows.push(['암호', p.pw.value + (p.pw.from === 'comment' ? '  (작성자 댓글)' : p.pw.from === 'title' ? '  (제목)' : ''), 'pw']);
+  else if (p.pw) rows.push(['암호', '걸려 있음 — 귓속말 등으로 받기 (글 참고)', 'pw']);
+  rows.push(
     ['종류', p.kind === 'sub' ? `잠수함 망호 — "${p.kindMatch}"` : '일반 망호'],
-    ['작성자', writer + (p.uid ? '' : ' · 유동')],
+    ['작성자', writer],
     ['작성', p.t ? `${hhmm(p.t)} · ${ageText(now - p.t)} 전` : '?'],
     ['댓글 · 조회', `${p.replies} · ${p.views}`],
-  ];
+  );
+  if (p.kind === 'sub' && p.until) rows.push(['끝', `${dayHhmm(p.until)} ${p.untilFrom === 'title' ? '(제목)' : '(제목에 없음 → 8시간)'} — 지나면 목록에서 빠짐`]);
   if (p.roles && p.roles.length) {
     const names = p.roles.map((r) => ROLE_NAME[r]).join('·');
     if (role === 'all') rows.push(['직군', `${p.roleText} (${names})`]);
@@ -138,11 +198,13 @@ function tabModel(kind, c) {
     rows: [['모집 중', String(c.open), 'good'],
       ...(role !== 'all' ? [['직군 다름', `${c.other} (내 직군 ${ROLE_NAME[role]})`, 'other']] : []),
       ['20분 지남', String(c.stale), 'dim'], ['출항', String(c.gone), 'dim'],
-      ['마지막 스캔', `${hhmm(snap.t)} · 1분마다`]],
+      ['보는 범위', LIVE_TEXT[kind]],
+      ['마지막 스캔', `${hhmm(snap.t)} · 1분마다 · 요청 ${snap.requests}회`]],
     note: (kind === 'sub'
       ? '잠수함 = 자동 사냥을 오래 돌리는 망호. 제목에 잠망·수면·자러·박지·허벅·"N시까지"·"~N시"·동굴1/매어 같은 말\n'
       : '일반 = 레이드·어비스 등 한 번 모여 공략하는 망호 (잠수함이 아닌 것)\n') +
-      `최근 ${c.total}개 · 제목이나 작성자 댓글(디시콘 이름 포함)에 "${kw}" → 출항 · 20분 지나면 출항으로 셈\n` +
+      `${c.total}개 · 제목이나 작성자 댓글(디시콘 이름 포함)에 "${kw}" → 출항 · 20분 지나면 출항으로 셈\n` +
+      '범위를 지난 글은 보이지 않고 더 읽지 않음 · 자물쇠 = 암호 (줄에 마우스)\n' +
       (kind === tab ? '클릭: 목록 접기 / 펼치기' : '클릭: 이 탭 보기'),
   };
 }
@@ -172,16 +234,20 @@ function draw() {
   }
   const posts = postsOf(tab);
   if (!posts.length) {
-    list.append(el('div', 'empty', `${KIND[tab]} 글 없음 (최근 50개 중)`));
+    list.append(el('div', 'empty', `${KIND[tab]} 없음 (${LIVE_TEXT[tab]})`));
   } else {
     const head = el('div', 'cols');
     head.append(el('span', 'ttl', '제목'), el('span', 'nick', '작성자'), el('span', 'age', '시간'));
     list.append(head);
+    // 겹칠 때: the nicks seen more than once in this list get their code
+    const seen = {};
+    for (const p of posts) seen[p.nick] = (seen[p.nick] || 0) + 1;
     for (const p of posts) {
       const row = el('div', 'post hit tipm' + (p.departed ? ` gone by-${p.departed.by}` : ''));
       const ttl = el('span', 'ttl');
       ttl.append(svgIcon(p.kind || 'normal'), el('span', 'tt', p.title));
-      row.append(ttl, el('span', 'nick', p.nick), el('span', 'age num', ''));
+      if (p.pw) ttl.append(lockIcon());
+      row.append(ttl, nickCell(p, nickMode === 'code' || (nickMode === 'dup' && seen[p.nick] > 1)), el('span', 'age num', ''));
       row.post = p;
       row.addEventListener('click', () => { if (!blocked()) window.mangho.ui('open', p.no); });
       list.append(row);
@@ -446,6 +512,48 @@ sizer.addEventListener('pointerdown', (e) => {
   sizer.addEventListener('pointercancel', done);
 });
 sizer.addEventListener('dblclick', () => { if (!blocked()) window.mangho.ui('maxh', null); });
+
+// The width bar on the edge away from the anchored side (user 2026-11-27), like the height
+// line: hover = a thin line, drag = the width (main.js follows the cursor - the window moves
+// under it), double-click = the default width. Never narrower than the header needs.
+const wsizer = $('wsizer');
+let defWidth = 250;
+function setWidthTip(w, def) {
+  if (def) defWidth = def;
+  wsizer.tipModel = { lines: [`너비 ${w}px — 끌기: 너비 바꾸기 (게임 창의 40%까지, 다른 오버레이 앞에서 멈춤)`, `두 번 클릭: 기본 너비 ${defWidth}px`] };
+}
+function headNeeds() {
+  const head = document.querySelector('.head');
+  const cs = getComputedStyle(head);
+  const gap = parseFloat(cs.columnGap) || parseFloat(cs.gap) || 0;
+  let need = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+  let n = 0;
+  for (const c of head.children) {
+    if (c.offsetParent === null) continue;            // hidden
+    need += c.getBoundingClientRect().width;
+    n += 1;
+  }
+  need += gap * Math.max(0, n - 1);
+  return Math.ceil(need + (window.innerWidth - head.getBoundingClientRect().width) + 4);
+}
+wsizer.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0 || blocked()) return;
+  e.preventDefault();
+  try { wsizer.setPointerCapture(e.pointerId); } catch { /* not capturable */ }
+  tipFor(null);
+  document.body.classList.add('wsizing');
+  window.mangho.ui('width-drag', { on: true, min: headNeeds() });
+  const done = () => {
+    wsizer.removeEventListener('pointerup', done);
+    wsizer.removeEventListener('pointercancel', done);
+    document.body.classList.remove('wsizing');
+    window.mangho.ui('width-drag', { on: false });
+    blockUntil = Date.now() + 300;
+  };
+  wsizer.addEventListener('pointerup', done);
+  wsizer.addEventListener('pointercancel', done);
+});
+wsizer.addEventListener('dblclick', () => { if (!blocked()) window.mangho.ui('width-reset'); });
 new ResizeObserver(() => {
   fitList();
   window.mangho.ui('height', $('root').getBoundingClientRect().height + 2);
@@ -463,9 +571,20 @@ window.mangho.onFeed((d) => {
   } else if (d.type === 'window') {
     document.body.classList.toggle('expanded', !!d.expanded);
     document.body.classList.toggle('left', d.align === 'left');
-    document.body.classList.toggle('show-nick', !!d.nick);
+    const mode = d.nickMode || 'off';
+    document.body.classList.toggle('show-nick', mode !== 'off');
+    if (mode !== nickMode) { nickMode = mode; if (snap) draw(); }
+    document.body.classList.toggle('wbar-left', d.wside === 'left');
+    document.body.classList.toggle('wbar-right', d.wside !== 'left');
+    if (d.width) setWidthTip(d.width, d.defWidth);
     if (d.tab && d.tab !== tab) showTab(d.tab);
     if (d.role && d.role !== role) setRole(d.role);
+  } else if (d.type === 'width') {
+    // the side bar is being dragged: a live label; gone when let go
+    const lab = $('wlabel');
+    lab.textContent = `너비 ${d.width}px`;
+    lab.hidden = !d.live;
+    setWidthTip(d.width);
   } else if (d.type === 'mode') {
     document.body.classList.toggle('app', !!d.app);
     $('modepill').tipModel = { lines: ['게임 창을 찾지 못해 일반 창으로 바뀌었습니다', '윗줄을 끌어 옮기기 · 게임이 켜지면 오버레이로 돌아감'] };
