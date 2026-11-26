@@ -56,6 +56,12 @@ body:not(.expanded) .tab.on .chev::after { content: '▾'; }
 body.busy .tab.on .cnt { opacity: .5; }
 .head .tab .kicon { --ic: currentColor; --ic2: currentColor; margin-right: 3px; }
 #menu.warn { background: #d8493d; color: #fff; animation: pulse 1.6s ease-in-out infinite; }
+/* a newer release is out: a green dot on the ☰ (installing is in its menu) */
+#menu { position: relative; }
+#menu.upd::after {
+  content: ''; position: absolute; top: 1px; right: 1px; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green); box-shadow: 0 0 0 1px rgba(0,0,0,.6);
+}
 @keyframes pulse { 50% { filter: brightness(1.35); } }
 
 /* the list - same family as the game's chat box (dark, rounded, translucent) */

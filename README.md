@@ -9,7 +9,10 @@
 1. 받은 zip을 아무 폴더에 풉니다.
 2. `망호 스캐너` 폴더의 **`망호 스캐너.exe`**를 실행합니다. 따로 설치할 것은 없습니다.
    - 서명되지 않은 프로그램이라 처음에 Windows가 "PC 보호" 창을 띄울 수 있습니다 → **추가 정보 → 실행**.
+   - 같은 이유로 백신(Windows Defender 등)이 잘못 잡는 일이 있습니다. 받은 곳이
+     [GitHub 릴리스](https://github.com/mobingi-widgets/mangho-scanner/releases)인지 확인하세요.
 3. 끄기: 오른쪽 위 **☰ → 종료** (또는 트레이 아이콘 우클릭 → 종료).
+4. 새 버전은 스캐너가 알려 줍니다 (아래 "업데이트").
 
 소스로 실행할 때(개발): [Node.js](https://nodejs.org) LTS를 설치하고 `망호 스캐너.bat` — 첫 실행 때 Electron을 내려받느라 1~2분 걸립니다.
 
@@ -112,6 +115,18 @@
 게임 클라이언트·게임 통신에는 전혀 손대지 않습니다. `gamewin.ps1`이 Windows에 "마비노기 모바일" 창의 위치와 크기만 물어봐서
 오버레이를 그 위에 맞춥니다.
 
+## 업데이트
+
+- 켤 때와 6시간마다 [GitHub 릴리스](https://github.com/mobingi-widgets/mangho-scanner/releases)를 확인합니다 (정식 릴리스만).
+- 새 버전이 있으면 ☰에 초록 점이 생기고, ☰ 메뉴 맨 위에 **⬆ 업데이트 x.y.z 설치**가 나옵니다. 스스로 설치하거나 재시작하지 않습니다.
+- 설치를 누르면 코드만(수십 KB) 받아 **서명을 확인한 뒤** 바꾸고 스캐너를 다시 켭니다.
+  - 받는 파일은 모두 이 프로그램에 들어 있는 공개키(minisign)로 서명을 확인합니다. 서명이 없거나 다르면, 버전이 지금보다
+    높지 않으면, 크기·sha256이 맞지 않으면 설치하지 않습니다. HTTPS로 github.com 쪽 주소에서만 받습니다.
+  - 이전 버전은 `resources\.update\previous`에 남겨 두고, 새 버전이 1분 안에 정상으로 뜨지 않으면 이전 버전으로 되돌립니다.
+  - Electron 자체가 바뀌는 버전이면 "전체 설치 필요"라고 알려 주고 릴리스 페이지를 엽니다(새 zip을 받아 풀기).
+- 설정(`%APPDATA%\mangho-scanner`)은 건드리지 않습니다. 기록은 `%APPDATA%\mangho-scanner\update.log`.
+- 소스로 실행 중이면(`망호 스캐너.bat`) 알려 주기만 합니다 — 소스는 git으로 받습니다.
+
 ## 설정
 
 위치·정렬·표시·투명도는 `%APPDATA%\mangho-scanner\overlay.json`에 저장됩니다.
@@ -135,6 +150,7 @@
 | `tip.js` `tip.html` | 툴팁 창 |
 | `preload.js` | 화면 ↔ 본체 연결 |
 | `망호 스캐너.bat` | 실행 (첫 실행 시 Electron 설치) |
-| `build_dist.py` · `build_exe.js` | 배포본 만들기 (개발용): exe 빌드(@electron/packager) → zip. `npm install` 후 `python build_dist.py` |
+| `updater.js` · `apply-update.ps1` | 업데이트 확인·서명 검증·교체·되돌리기 (주간 납품 위젯과 같은 파일) |
+| `build_dist.py` · `build_exe.js` | 배포본 만들기 (개발용): exe 빌드(@electron/packager) → zip. `npm install` 후 `python build_dist.py`, 릴리스 파일은 `--release` |
 
 변경 이력은 [CHANGELOG.md](CHANGELOG.md).

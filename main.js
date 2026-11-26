@@ -16,6 +16,70 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 const scanner = require('./scanner');
 const dockLib = require('./dock');
+const updater = require('./updater');
+
+// ------------------------------------------------------------------- updates
+// From the GitHub releases of mobingi-widgets/mangho-scanner (updater.js: signed, strictly
+// newer only). Checked at start and every 6 h; never installs or restarts by itself -
+// the ☰ gets a dot and the menu an "업데이트 … 설치" line (user, 2026-11-27: they are in the game).
+// Installing swaps resources\app of the built exe; a source run (npm start) only reports.
+const UPDATE = { repo: 'mangho-scanner', app: 'mangho-scanner', everyMs: 6 * 3600 * 1000 };
+const upd = { info: null, error: '', at: 0, busy: false };
+const canInstall = () => app.isPackaged;
+const okFile = () => path.join(app.getPath('userData'), 'update-ok.json');
+
+async function checkUpdate() {
+  if (upd.busy) return;
+  upd.busy = true;
+  try {
+    upd.info = await updater.check({ repo: UPDATE.repo, app: UPDATE.app, version: app.getVersion() });
+    upd.error = '';
+  } catch (e) {
+    upd.error = String((e && e.message) || e);
+  } finally {
+    upd.busy = false;
+    upd.at = Date.now();
+    toPage({ type: 'update', version: upd.info && upd.info.available ? upd.info.version : null });
+  }
+}
+
+async function installUpdate() {
+  const info = upd.info;
+  if (!info || !info.available || info.needFull || !canInstall() || upd.busy) return;
+  upd.busy = true;
+  try {
+    const appDir = path.join(process.resourcesPath, 'app');
+    const staged = await updater.stage(info, path.join(process.resourcesPath, '.update'));
+    updater.handOver(staged, info, {
+      appDir, keep: [], launch: process.execPath, launchCwd: path.dirname(process.execPath),
+      okFile: okFile(), logFile: path.join(app.getPath('userData'), 'update.log'),
+    });
+    app.quit();
+  } catch (e) {
+    upd.error = `설치 안 함 — ${(e && e.message) || e}`;
+    upd.busy = false;
+    pushProblems();
+  }
+}
+
+function updateLines() {
+  const i = upd.info;
+  const out = [];
+  if (i && i.available) {
+    const first = i.notes.split('\n').map((s) => s.replace(/^[-*]\s*/, '').trim()).find(Boolean) || '';
+    if (i.needFull) out.push({ label: `⬆ 새 버전 ${i.version} — 전체 설치 필요 (릴리스 페이지 열기)`, click: () => shell.openExternal(i.page) });
+    else if (!canInstall()) out.push({ label: `⬆ 새 버전 ${i.version} — 소스 실행이라 git으로 받기`, enabled: false });
+    else out.push({ label: `⬆ 업데이트 ${i.version} 설치 (스캐너 재시작)`, click: installUpdate });
+    if (first) out.push({ label: `   ${first.length > 60 ? first.slice(0, 60) + '…' : first}`, enabled: false });
+    out.push({ label: '   변경 내용 보기 (릴리스 페이지)', click: () => shell.openExternal(i.page) });
+  }
+  const when = upd.at ? `${ago(upd.at)} 전 확인` : '확인 전';
+  const state = upd.error ? `업데이트 확인 실패 — ${upd.error}` : i && i.none ? `업데이트: 아직 릴리스 없음 · ${when}`
+    : i && !i.available ? `업데이트: 최신 (${app.getVersion()}) · ${when}` : i ? `현재 ${app.getVersion()} · ${when}` : `업데이트: ${when}`;
+  out.push({ label: state, enabled: false });
+  out.push({ label: '업데이트 지금 확인', click: () => checkUpdate() });
+  return out;
+}
 
 const EVERY_MS = 60 * 1000;      // one scan a minute (user)
 const APP_AFTER_MS = 3000;       // the game window must be gone this long (loading screens blink)
@@ -105,6 +169,7 @@ function problems() {
   if (scan.fails >= 2) out.push(`스캔 실패 ${scan.fails}회 연속 — ${scan.error}`);
   else if (scan.okAt && Date.now() - scan.okAt > 3 * EVERY_MS && !scan.paused) out.push(`스캔 멈춤 (${ago(scan.okAt)} 전이 마지막)`);
   if (tracker.dead) out.push(`게임 창 추적 불가 — ${tracker.error || 'PowerShell 실행 실패'}`);
+  if (upd.error.startsWith('설치 안 함')) out.push(`업데이트 ${upd.error}`);   // a failed check (offline...) does not nag
   return out;
 }
 
@@ -391,6 +456,8 @@ function buildMenu() {
   return Menu.buildFromTemplate([
     ...syncLines().map((label) => ({ label, enabled: false })),
     { type: 'separator' },
+    ...updateLines(),
+    { type: 'separator' },
     { label: '지금 스캔', click: () => runScan() },
     { label: '망호 탭 브라우저로 열기', click: () => shell.openExternal(scanner.listUrl(state.src)) },
     { type: 'separator' },
@@ -485,6 +552,8 @@ function createWindow() {
     lastProblems = '';
     pushProblems();
     if (scan.last) toPage({ type: 'snapshot', ...scan.last });
+    if (upd.info) toPage({ type: 'update', version: upd.info.available ? upd.info.version : null });
+    updater.markHealthy(okFile(), app.getVersion());     // an update waits for this, else it rolls back
     place();
   });
 }
@@ -648,6 +717,11 @@ if (!app.requestSingleInstanceLock()) {
     setInterval(() => { if (win && !win.isDestroyed() && !appMode && win.isVisible()) dock.publish(win.getBounds()); }, 5000);
     startTracker();
     runScan();
+    if (!SHOT) {
+      setTimeout(checkUpdate, 10 * 1000);
+      setInterval(checkUpdate, UPDATE.everyMs);
+      if (canInstall()) setTimeout(() => updater.cleanup(path.join(process.resourcesPath, '.update'), app.getVersion()), 90 * 1000);
+    }
     setInterval(raise, 2000);
     setInterval(checkMode, 1000);
     setInterval(pushProblems, 5000);

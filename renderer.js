@@ -355,8 +355,10 @@ function setProblems(list) {
   const bad = list.length > 0;
   m.textContent = bad ? '⚠' : '☰';
   m.classList.toggle('warn', bad);
+  const upd = m.dataset.upd;
   m.tipModel = {
-    lines: bad ? list.map((p) => '⚠ ' + p) : ['메뉴 — 스캔 정보 · 지금 스캔 · 망호 탭 열기 · 위치 초기화 · 표시 · 종료'],
+    lines: [...(bad ? list.map((p) => '⚠ ' + p) : ['메뉴 — 스캔 정보 · 지금 스캔 · 망호 탭 열기 · 위치 초기화 · 표시 · 종료']),
+      ...(upd ? [`⬆ 새 버전 ${upd} — 메뉴에서 설치`] : [])],
     note: '클릭: 메뉴 · 드래그: 위치 옮기기 (가장자리에 붙음 · 다른 오버레이는 피함)',
   };
 }
@@ -449,6 +451,11 @@ window.mangho.onFeed((d) => {
       blockUntil = Date.now() + 300;     // the release is not a click on what is under it
       hovering = false;                  // main made the window click-through again; the next move re-asks
     }
+  } else if (d.type === 'update') {
+    // a newer release: a dot on the ☰; installing is in the menu (never by itself)
+    $('menu').classList.toggle('upd', !!d.version);
+    $('menu').dataset.upd = d.version || '';
+    setProblems(problems);
   } else if (d.type === 'menu') {
     blockUntil = d.open ? Infinity : Date.now() + 300;
   }
