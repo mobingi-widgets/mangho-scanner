@@ -17,7 +17,9 @@ Publishing them (tag v<version>) is done separately (tools/release/publish.js).
 Steps: icon.ico from icon.png (Pillow) -> `node build_exe.js` (@electron/packager, a
 devDependency: run `npm install` once) -> zip(s).
 The program keeps no personal data in its folder (settings live in %APPDATA%\\mangho-scanner);
-a zip that would carry a key file (*.pem, *.key, minisign*) is refused.
+a zip that would carry a key file (*.pem, *.key, minisign*), a Python cache (*.pyc - it holds
+the workspace's absolute path) or a text of ours showing this machine (the workspace path, a
+path into a user profile folder, the Windows user name) is refused.
 """
 from __future__ import annotations
 
@@ -36,6 +38,25 @@ WORKSPACE = os.path.dirname(HERE)
 NAME = "망호 스캐너"
 APP_ID = "mangho-scanner"
 KEY_LIKE = re.compile(r"(\.pem$|\.key$|minisign|\.credentials)", re.I)
+TEXT_EXT = (".js", ".html", ".css", ".json", ".md", ".py", ".ps1", ".bat", ".txt")
+
+
+def leaks(text):
+    """Where this machine shows through a shipped text: the workspace's absolute path, a user
+    profile path (drive, Users, a name), the Windows user name. Our own files only - the Electron
+    runtime's binaries are not ours to read (Node has 'hexBytesCache' and the like)."""
+    out = []
+    low = text.lower()
+    for p in {WORKSPACE, WORKSPACE.replace("\\", "/"), WORKSPACE.replace("\\", "\\\\")}:
+        if p.lower() in low:
+            out.append("작업 공간 경로")
+            break
+    if re.search(r"[A-Za-z]:(\\\\|\\|/)+Users(\\\\|\\|/)+\w", text, re.I):
+        out.append("사용자 폴더 경로")
+    user = os.environ.get("USERNAME", "")
+    if len(user) >= 3 and re.search(r"(?<![A-Za-z0-9])%s(?![A-Za-z0-9])" % re.escape(user), text, re.I):
+        out.append("Windows 사용자 이름")
+    return out
 
 
 def version():
@@ -93,16 +114,30 @@ def build_app(build):
 
 
 def zip_tree(out, root, prefix="", extra=()):
-    """Zip everything under root (as prefix/...), plus (src, arcname) extras; refuse key files."""
-    entries = []
+    """Zip everything under root (as prefix/...), plus (src, arcname) extras. Refuses key files,
+    Python caches (they carry the workspace's absolute path) and our texts that show this machine."""
+    entries, ours = [], []
     for base, _dirs, names in os.walk(root):
         for n in names:
             full = os.path.join(base, n)
-            entries.append((full, os.path.join(prefix, os.path.relpath(full, root))))
+            rel = os.path.relpath(full, root)
+            entries.append((full, os.path.join(prefix, rel)))
+            if not prefix or rel.startswith(os.path.join("resources", "app") + os.sep):
+                ours.append(entries[-1])      # our code (not the Electron runtime around it)
     entries += list(extra)
+    ours += list(extra)
     bad = [arc for _f, arc in entries if KEY_LIKE.search(arc)]
     if bad:
         raise SystemExit("키 파일처럼 보이는 것이 들어 있어 만들지 않음: %s" % ", ".join(bad))
+    bad = [arc for _f, arc in entries if arc.endswith(".pyc") or "__pycache__" in arc]
+    if bad:
+        raise SystemExit("Python 캐시(작업 공간 경로가 박힘)가 들어 있어 만들지 않음: %s" % ", ".join(bad))
+    for full, arc in ours:
+        found = leaks(open(full, encoding="utf-8", errors="replace").read()) if arc.endswith(TEXT_EXT) else []
+        if found:
+            bad.append("%s: %s" % (arc, ", ".join(found)))
+    if bad:
+        raise SystemExit("이 컴퓨터 정보가 들어 있어 만들지 않음:\n  " + "\n  ".join(bad))
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         for full, arc in entries:
             z.write(full, arc)

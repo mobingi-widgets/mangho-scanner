@@ -752,7 +752,9 @@ if (!app.requestSingleInstanceLock()) {
       // first run, or this version's notice is newer than the agreed one (e.g. a zip put over
       // by hand): ask before anything starts; with the old version kept aside, offer going back
       const guard = app.isPackaged && uui.hasPrevious();
-      const answer = await consent.ask({ dir: __dirname, title: NOTICE_TITLE, mode: guard ? 'guard' : 'ask' });
+      // started fine (an update waiting on update-ok.json must not roll back while the notice is read)
+      const onShown = () => updater.markHealthy(path.join(app.getPath('userData'), 'update-ok.json'), app.getVersion());
+      const answer = await consent.ask({ dir: __dirname, title: NOTICE_TITLE, mode: guard ? 'guard' : 'ask', onShown });
       if (answer === 'rollback') { uui.rollback(); return; }
       if (answer !== true) { app.quit(); return; }
       saveCfg({ notice: noticeV, noticeAt: new Date().toISOString(), noticeDeclined: null });
