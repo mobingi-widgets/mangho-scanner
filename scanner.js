@@ -5,10 +5,9 @@
 // comments only when their count changed since the last look. Older posts are not shown
 // and nothing of theirs is read (user 2026-11-27: after an hour no 망호 is alive).
 //
-// A post counts as departed (출항) when
-//   - its title contains a keyword ('출항', '출발'), or
-//   - its author wrote a comment containing one - text, or a 디시콘 whose name is one
-//     (the gallery's hand-drawn 출항티콘 is named '출항'; user, 2026-11-27).
+// A post counts as departed (출항 - left, full or called off) when its title, or a comment of its
+// author (the text, or a 디시콘's name: the gallery's 출항티콘 is named '출항'), has a closing word:
+// 출항 · 출발 · 마감 · 종료 anywhere, 완 · 풀 · 펑 · 침몰 · 끝 · 취소 ... standing alone (closingWord below).
 // The author is matched by account id (고닉/반고닉), or for 유동 by nickname + IP prefix.
 //
 // node scanner.js            one scan, printed (no Electron needed)
@@ -29,7 +28,8 @@ const SUB_MAX_MS = 26 * 60 * 60 * 1000;   // an end time further than this from 
 
 // gallery: id in the URL, kind: mgallery (마이너) | board (정식) | mini/board (미니),
 // head: the 말머리 number of 🐳 망호 (listSearchHead(140) on the page)
-const DEFAULT_SOURCE = { gallery: 'enban', kind: 'mgallery', head: 140, name: '에반(마비노기 모바일)', keywords: ['출항', '출발'], max: 10 };   // 출발 too (user 2026-11-27)
+// keywords: more words that close a post wherever they are, on top of the built-in ones (closingWord)
+const DEFAULT_SOURCE = { gallery: 'enban', kind: 'mgallery', head: 140, name: '에반(마비노기 모바일)', keywords: [], max: 10 };
 
 const GALLTYPE = { mgallery: 'M', board: 'G', 'mini/board': 'MI' };
 
@@ -390,8 +390,6 @@ function byAuthor(post, c) {
 }
 
 const deleted = (c) => (c.del_yn && c.del_yn !== 'N') || (c.is_delete && String(c.is_delete) !== '0');
-// the first keyword found in s, or null
-const found = (keywords, s) => keywords.find((k) => k && String(s).includes(k)) || null;
 
 // ------------------------------------------------------------- 잠수함 망호 or not
 // 잠수함 망호 (user 2026-11-27): a party that leaves the game's auto-hunt running for
@@ -515,6 +513,66 @@ function liveUntil(title, t, kind) {
   return { until: t + SUB_DEFAULT_MS, from: 'default' };
 }
 
+// ------------------------------------------------------------ 출항 or not
+// The words that close a 망호 - it left, or it is full or called off (user 2026-11-28, from 600
+// titles of the 망호 tab 10.29..11.27 and the author comments of 200 posts: 출항 / 출발 alone left
+// 109 closed titles and 21 posts closed by a comment showing as 모집 중).
+//  - anywhere (as part of any word): 출항 · 출발 · 마감 · 종료, except
+//      마감 / 종료 right after a time - an end time: "아침 09:00 마감!", "10시 종료", "13시 종료 예정"
+//        (출항 after a time is still a departure: "~9시 한명 출항", "10시까지! 출항");
+//      출발못 / 출항못 - it could not leave;
+//      재출발 / 재출항 in a title - a later plan ("10시 수리 한번 하고 재출발"); in a comment it left again.
+//  - standing alone only: 완 · 완료 · 풀 · 풀방 · 펑 · 침몰 · 끝 · 취소 · ㅊㅎ -
+//      a bracket that ends with it: (완) [마감] (침몰!!) (취소할게) [사람안구해서펑..] -완료- -안와서 펑-;
+//      the end of the text after a space, "/" or "...": "스카스 침몰", "8시까지 정박지 7200+ 완", a comment "완";
+//      the start before a bracket: "완)물길 망호".
+//    In a sentence they say something else: "1번째 완료 다시 ㄱㄱ" (a 품앗이 going again), "딜러2명끝 힐1구함",
+//    "5분후 침몰 예정", "침몰 기념 스카스 재 망호", "걍 침몰시킴", 풀강, 완전 ...
+//  - a 디시콘 whose name has 출항 · 출발 · 침몰 · 펑 (the 출항티콘, 망호펑).
+// source.keywords: more words that count anywhere, on top of these (before 1.12.0 the whole list).
+const CLOSE_ANY_RE = /출항|출발|마감|종료/g;
+const CLOSE_ANY = ['출항', '출발', '마감', '종료'];
+const CLOSE_DCCON = ['출항', '출발', '침몰', '펑'];
+const ALONE = '완료|완|풀방|풀|펑|침몰|끝|취소|ㅊㅎ';         // the longer first
+const ALONE_TAIL = '(?:할게요?|합니다|됨|됐(?:음|어요?)|했(?:음|어요?)|함|임|요)?';   // (취소할게), 펑함
+const ALONE_MARK = '[\\s.,~!…ㅠㅜㅋ^]*';                    // 완~!  침몰!!  펑..  펑ㅠㅠ
+const ALONE_RES = [
+  // a bracket of its own, or a run of dashes on both sides ("------펑------")
+  new RegExp(`(?:[(\\[{<【]|-+)[^()\\[\\]{}<>【】-]*?(${ALONE})${ALONE_TAIL}${ALONE_MARK}(?:[)\\]}>】]|-)`),
+  new RegExp(`(?:^|[\\s/|.…,])(${ALONE})${ALONE_TAIL}${ALONE_MARK}$`),     // the end
+  new RegExp(`^\\s*(${ALONE})${ALONE_MARK}[)\\]}>】]`),                   // the start: "완)…"
+];
+// a time right before 마감 / 종료: "09:00 마감", "10시 종료", "6시반까지 마감", "열시에 마감"
+const TIME_BEFORE_RE = new RegExp(`(?:${HOUR}\\s*시(?:\\s*반|\\s*\\d{1,2}\\s*분)?|\\d{1,2}:\\d\\d)\\s*(?:에|까지|쯤)?\\s*$`);
+
+// source.keywords beyond the built-in words (a list copied from the old README adds nothing)
+function extraWords(keywords) {
+  return (Array.isArray(keywords) ? keywords : []).filter((k) => typeof k === 'string' && k && !CLOSE_ANY.includes(k));
+}
+
+// the word that closes the post in a title (from 'title') or an author comment (from 'comment'), or null
+function closingWord(text, from, extra = []) {
+  const s = String(text || '').replace(/\s*-\s*dc App\s*$/i, '').trim();     // the app's signature
+  if (!s) return null;
+  for (const m of s.matchAll(CLOSE_ANY_RE)) {
+    const w = m[0];
+    const before = s.slice(0, m.index);
+    if ((w === '마감' || w === '종료') && TIME_BEFORE_RE.test(before)) continue;
+    if ((w === '출항' || w === '출발') && /^\s*못/.test(s.slice(m.index + w.length))) continue;
+    if ((w === '출항' || w === '출발') && from === 'title' && /재\s?$/.test(before)) continue;
+    return w;
+  }
+  const more = extra.find((k) => s.includes(k));
+  if (more) return more;
+  for (const re of ALONE_RES) {
+    const m = s.match(re);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+const dcconWord = (name, extra = []) => [...CLOSE_DCCON, ...extra].find((k) => String(name).includes(k)) || null;
+
 // -------------------------------------------------------------------- one scan
 
 function createState(src) {
@@ -547,6 +605,7 @@ async function scan(state, { kinds = ['normal', 'sub'] } = {}) {
     top.push({ ...p, kind: k.kind, kindRule: k.rule, kindMatch: k.match, until: live.until, untilFrom: live.from, ...rolesOf(p.title) });
   }
   const pause = async () => { if (requests > 1) await sleep(COMMENT_GAP_MS); requests += 1; };
+  const extra = extraWords(src.keywords);
   const out = [];
   let commentErr = '';
   let bodyErr = '';
@@ -573,7 +632,7 @@ async function scan(state, { kinds = ['normal', 'sub'] } = {}) {
         bodyErr = String(e.message || e);           // try again next scan
       }
     }
-    const inTitle = found(src.keywords, p.title);
+    const inTitle = closingWord(p.title, 'title', extra);
     if (inTitle) {
       post.departed = { by: 'title', word: inTitle };
     } else if (p.replies > 0 && prev && prev.checked === p.replies) {
@@ -584,7 +643,7 @@ async function scan(state, { kinds = ['normal', 'sub'] } = {}) {
           await pause();
           const mine = (await fetchComments(src, p.no, token)).filter((c) => byAuthor(p, c) && !deleted(c)).map(readComment);
           post.pwComments = mine.map((c) => c.text).filter((s) => PW_RE.test(s));
-          const word = (c) => found(src.keywords, c.text) || c.dccons.map((n) => found(src.keywords, n)).find(Boolean) || null;
+          const word = (c) => closingWord(c.text, 'comment', extra) || c.dccons.map((n) => dcconWord(n, extra)).find(Boolean) || null;
           const hit = mine.filter(word);
           const last = hit.length ? hit[hit.length - 1] : null;
           post.departed = last ? { by: 'comment', word: word(last), text: last.text, dccons: last.dccons, at: last.at } : null;
@@ -619,7 +678,7 @@ async function scan(state, { kinds = ['normal', 'sub'] } = {}) {
 }
 
 module.exports = { DEFAULT_SOURCE, createState, scan, listUrl, viewUrl, parseList, writerOf, readComment, byAuthor, kindOf, SUB_RULES, rolesOf,
-  bodyText, passwordIn, passwordOf, passwordFind, endTimeOf, liveUntil, refsIn, linkRef, writerKey, sameWriter, walkRefs, resolveRefs, REF_HOPS,
+  bodyText, passwordIn, passwordOf, passwordFind, endTimeOf, liveUntil, closingWord, dcconWord, extraWords, refsIn, linkRef, writerKey, sameWriter, walkRefs, resolveRefs, REF_HOPS,
   SHARE_MS, SHARE_MAX };
 
 if (require.main === module) {
@@ -632,7 +691,7 @@ if (require.main === module) {
       console.log(kind === 'normal' ? '== 일반 망호' : '== 잠수함 망호');
       for (const p of s.posts.filter((x) => x.kind === kind)) {
         const why = !p.departed ? '모집' : p.departed.by === 'title' ? `출항(제목 "${p.departed.word}")`
-          : `출항(댓글 ${p.departed.at || ''} ${p.departed.text || ''}${p.departed.dccons.length ? ' [디시콘 ' + p.departed.dccons.join(',') + ']' : ''})`;
+          : `출항(댓글 "${p.departed.word}" ${p.departed.at || ''} ${p.departed.text || ''}${p.departed.dccons.length ? ' [디시콘 ' + p.departed.dccons.join(',') + ']' : ''})`;
         const k = p.kind === 'sub' ? ` [${p.kindRule}: ${p.kindMatch} · ~${hhmm(p.until)} ${p.untilFrom}]` : '';
         const pw = (p.pw ? (p.pw.value ? ` 🔒 "${p.pw.value}" (${p.pw.from}${p.pw.inherited ? ` · 원글 #${p.pw.inherited}` : ''})` : ' 🔒 (귓속말 등)') : '')
           + (p.ref && p.ref.unread ? ` [퍼 온 글 #${p.ref.no}]` : '');

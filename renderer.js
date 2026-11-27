@@ -223,8 +223,9 @@ function postModel(p) {
   else if (isStale(p, now)) state = ['상태', '20분 지남', 'dim'];
   else if (!p.departed && notMine(p)) state = ['상태', '직군 다름', 'other'];
   else if (!p.departed) state = ['상태', '모집 중', 'good'];
-  else if (p.departed.by === 'title') state = ['상태', '출항 (제목)', 'dim'];
-  else state = ['상태', `출항 (작성자 댓글 ${cmtTime(p.departed.at)})`, 'dim'];
+  // the word that closed it (scanner.js closingWord): 마감 (제목), 침몰 (작성자 댓글 01:39)
+  else if (p.departed.by === 'title') state = ['상태', `${p.departed.word || '출항'} (제목)`, 'dim'];
+  else state = ['상태', `${p.departed.word || '출항'} (작성자 댓글 ${cmtTime(p.departed.at)})`, 'dim'];
   rows.push(state);
   const lines = [];
   if (p.preview) lines.push(`원글: ${p.preview}`);

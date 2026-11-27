@@ -1049,7 +1049,7 @@ async function demoShots() {
     until: p.untilMin ? now + p.untilMin * 60000 : now - p.ageMin * 60000 + 3600000, untilFrom: p.untilFrom || 'default',
   }));
   scan.last = { t: now, ms: 0, requests: 6, first: true, posts, commentError: null,
-    source: { name: '에반(마비노기 모바일)', gallery: 'enban', head: 140, keywords: ['출항', '출발'], url: '' } };
+    source: { name: '에반(마비노기 모바일)', gallery: 'enban', head: 140, keywords: [], url: '' } };
   Object.assign(scan, { okAt: now - 12000, nextAt: now + 48000 });
   saveCfg({ role: 'deal', subs: 'tab' });
   await js("document.body.classList.add('demo')");
