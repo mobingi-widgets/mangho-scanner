@@ -125,15 +125,13 @@ body.tab-sub .panel { border-top-color: var(--subpill); }
 body.show-nick .nick { display: flex; }
 .nick .nn { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nick .code { flex: none; margin-left: 2px; font-size: 9px; opacity: .7; font-weight: 400; }
-/* the writer's kind before the nick (renderer.js writerKind; the designer's pictures, user
-   2026-11-27): a mask filled with the line's own colour, so it dims with the line. The pictures
-   are the files in author-icons/ - changed there, nothing else. 유동: none, the same room kept
-   so the nicks line up. */
-.nick .mi {
-  flex: none; align-self: center; width: 10px; height: 10px; margin-right: 3px; background: currentColor;
-  -webkit-mask: var(--glyph) center / contain no-repeat; mask: var(--glyph) center / contain no-repeat;
-}
-.mi.guest { background: none; }
+/* the writer's kind before the nick (renderer.js writerKind; the designer's gallery-like
+   pictures, user 2026-11-27): in their own colours, fainter on a dimmed line. The pictures are
+   the files in author-icons/ - changed there, nothing else. 유동: none, the same room kept so the
+   nicks line up. */
+.nick .mi { flex: none; align-self: center; width: 10px; height: 10px; margin-right: 3px; background: var(--glyph) center / contain no-repeat; }
+.post.rolex .mi { opacity: .76; }
+.post.gone .mi, .post.a20 .mi { opacity: .63; }
 .mi.fixed { --glyph: url("author-icons/fixed.svg"); }
 .mi.semi { --glyph: url("author-icons/semi.svg"); }
 .mi.new-fixed { --glyph: url("author-icons/new-fixed.svg"); }

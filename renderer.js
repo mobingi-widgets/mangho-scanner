@@ -81,11 +81,12 @@ function lockIcon() {
 }
 
 // ------------------------------------------------------------------ author
-// "닉네임(식별코드)" (user 2026-11-27): the code tells writers with the same nick apart -
-// a member's account id (고닉 / 반고닉), a 유동's IP prefix (shared by many: weaker).
-// In the narrow column the nick gives way ("…") and the code stays. Before the nick a picture
-// of the writer's kind (user 2026-11-27, the designer's - style.css .mi, author-icons/*.svg):
-// 고닉 · 반고닉 · 신규 고닉 · 신규 반고닉 · 매니저 · 부매니저; 유동 none. Its name is in the tooltip.
+// 작성자 [끔 | 닉 | 닉(코드)] (user 2026-11-27): 닉(코드) tells writers apart where the nick does
+// not - a 반고닉's account id, a 유동's IP prefix (shared by many: weaker); a 고닉's nick is its
+// own, so the nick alone. In the narrow column the nick gives way ("…") and the code stays.
+// Before the nick a picture of the writer's kind (the designer's, gallery-like - style.css .mi,
+// author-icons/*.svg): 고닉 · 반고닉 · 신규 고닉 · 신규 반고닉 · 매니저 · 부매니저; 유동 none.
+// Its name is in the tooltip (with the code, for every kind).
 let nickMode = 'off';
 const MEMBER = { fixed: '고닉', semi: '반고닉', guest: '유동' };
 const memberOf = (p) => p.member || (p.uid ? 'semi' : 'guest');
@@ -104,8 +105,8 @@ function codeOf(p, short) {
 function nickCell(p, withCode) {
   const cell = el('span', 'nick');
   cell.append(el('span', `mi ${writerKind(p)[0]}`), el('span', 'nn', p.nick));
-  const code = withCode ? codeOf(p, true) : '';
-  if (code) cell.append(el('span', 'code', code));
+  const code = withCode && memberOf(p) !== 'fixed' ? codeOf(p, true) : '';
+  if (code) cell.append(el('span', 'code', `(${code})`));
   return cell;
 }
 
@@ -236,15 +237,12 @@ function draw() {
     const head = el('div', 'cols');
     head.append(el('span', 'ttl', '제목'), el('span', 'nick', '작성자'), el('span', 'age', '시간'));
     list.append(head);
-    // 겹칠 때: the nicks seen more than once in this list get their code
-    const seen = {};
-    for (const p of posts) seen[p.nick] = (seen[p.nick] || 0) + 1;
     for (const p of posts) {
       const row = el('div', 'post hit tipm' + (p.departed ? ` gone by-${p.departed.by}` : ''));
       const ttl = el('span', 'ttl');
       ttl.append(svgIcon(p.kind || 'normal'), el('span', 'tt', p.title));
       if (p.pw) ttl.append(lockIcon());
-      row.append(ttl, nickCell(p, nickMode === 'code' || (nickMode === 'dup' && seen[p.nick] > 1)), el('span', 'age num', ''));
+      row.append(ttl, nickCell(p, nickMode === 'code'), el('span', 'age num', ''));
       row.post = p;
       row.addEventListener('click', () => { if (!blocked()) window.mangho.ui('open', p.no); });
       list.append(row);

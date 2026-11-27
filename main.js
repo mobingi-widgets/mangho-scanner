@@ -60,11 +60,11 @@ const POS = { left: { dx: 8, fy: 0.24 }, right: { dx: 88, fy: 0.37 } };
 // width = the whole window: since 1.5.1 that includes the width bar's own 8px strip beside the
 // list (style.css), so the default and every saved width got 8 more - the list keeps its width
 const WIDTH_STRIP = 8;
-const DEFAULTS = { width: 250 + WIDTH_STRIP, align: 'right', ...POS.right, show: 'always', opacity: 1, expanded: true, nickMode: 'off', tab: 'normal', role: 'all', font: 'mid', v: 2,
+const DEFAULTS = { width: 250 + WIDTH_STRIP, align: 'right', ...POS.right, show: 'always', opacity: 1, expanded: true, nickMode: 'code', tab: 'normal', role: 'all', font: 'mid', v: 2,
   // toasts (1.6.0, as in 주간 납품): pos = top | center | bottom of the game window, min = the least level shown
   toast: { on: true, pos: 'top', min: 'info' } };
 // 작성자 칸 (user 2026-11-27): off | nick | code = 닉(식별코드) | dup = code only for a nick seen twice
-const NICK_MODES = ['off', 'nick', 'code', 'dup'];
+const NICK_MODES = ['off', 'nick', 'code'];
 // 글자 작게/중간/크게 (user 2026-11-27): times the zoom that follows the game window's size;
 // everything of this program takes it (overlay, tooltip, menu, update window, notice)
 const FONT_SCALE = { small: 0.85, mid: 1, large: 1.2 };
@@ -92,9 +92,11 @@ function loadCfg() {
   let saved = {};
   try { saved = JSON.parse(fs.readFileSync(CFG_PATH(), 'utf8')); } catch { /* first run */ }
   const c = { ...DEFAULTS, ...saved, toast: { ...DEFAULTS.toast, ...(saved.toast || {}) }, v: DEFAULTS.v };
-  // 1.4.0 and before: 작성자 닉 on/off -> 겹칠 때 (the nick, a code when it repeats) / 끔
-  if (!saved.nickMode && 'nick' in saved) c.nickMode = saved.nick ? 'dup' : 'off';
-  if (!NICK_MODES.includes(c.nickMode)) c.nickMode = 'off';
+  // 1.4.0 and before: 작성자 닉 on/off; 1.6.1 and before: 겹칠 때 ('dup' - it counted a 고닉 writing
+  // twice as two) - both now 닉(코드)
+  if (!saved.nickMode && 'nick' in saved) c.nickMode = saved.nick ? 'code' : 'off';
+  if (c.nickMode === 'dup') c.nickMode = 'code';
+  if (!NICK_MODES.includes(c.nickMode)) c.nickMode = 'code';
   // 1.5.0 and before (v1): no strip for the width bar yet
   if ((saved.v || 1) < 2 && typeof saved.width === 'number') c.width = saved.width + WIDTH_STRIP;
   if (!FONT_SCALE[c.font]) c.font = 'mid';
@@ -535,8 +537,8 @@ function menuItems() {
   });
   items.push({
     type: 'segment', id: 'nickmode', label: '작성자',
-    tip: '겹칠 때: 같은 닉이 둘 이상이면 코드를 붙입니다',
-    options: [['off', '끔'], ['nick', '닉'], ['code', '닉+코드'], ['dup', '겹칠 때']].map(([id, label]) => ({ id, label, on: cfg.nickMode === id })),
+    tip: '닉(코드): 반고닉은 아이디, 유동은 IP 앞자리 · 고닉은 닉만',
+    options: [['off', '끔'], ['nick', '닉'], ['code', '닉(코드)']].map(([id, label]) => ({ id, label, on: cfg.nickMode === id })),
   });
   items.push(...(toast ? toast.menuItems() : []));      // 알림 [끔 | where]
   items.push({
@@ -700,10 +702,10 @@ async function demoShots() {
   await save(win, 'sub-tab');
   await js("window.__setTab('normal')");
   await wait(400);
-  // 작성자 = 겹칠 때 on a wider overlay (the width bar), its live label showing
+  // 작성자 = 닉(코드) on a wider overlay (the width bar), its live label showing
   saveCfg({ width: 364 });
   place();
-  demoWindow({ nickMode: 'dup', width: 364 });
+  demoWindow({ nickMode: 'code', width: 364 });
   toPage({ type: 'width', width: 340, live: true });
   await wait(700);
   await js("document.body.classList.add('wsizing')");

@@ -48,7 +48,8 @@
    ],
    "roleText": "힐러구함",
    "ip": "",
-   "member": "semi"
+   "member": "semi",
+   "newbie": true
   },
   {
    "no": 9000098,
@@ -65,7 +66,8 @@
     "line": "암호는 너가 먹은 점심 메뉴"
    },
    "ip": "",
-   "member": "fixed"
+   "member": "fixed",
+   "manager": "sub"
   },
   {
    "no": 9000097,
@@ -155,7 +157,8 @@
    "untilMin": 300,
    "untilFrom": "title",
    "ip": "",
-   "member": "fixed"
+   "member": "fixed",
+   "manager": "sub"
   },
   {
    "no": 9000092,
