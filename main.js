@@ -126,6 +126,25 @@ function toPage(obj) {
 const state = scanner.createState(cfg.source);
 const scan = { last: null, okAt: 0, fails: 0, error: '', busy: false, timer: null, nextAt: 0, paused: false };
 
+// A scan the user asked for (☰ / tray → 지금 스캔; user 2026-11-27: a pressed button must not look
+// dead): one toast that says it runs and then turns into how it went. With toasts off (or below the
+// chosen level) the same lines go to the bubble under the ☰. Automatic scans stay silent.
+let manualScan = null;                 // { toast: shown as a toast (else the bubble) } while one is asked for
+function scanSay(text, level, sec) {
+  if (manualScan && manualScan.toast) notify({ id: 'scan-now', text, level, sec, by: '스캐너' });
+  else toPage({ type: 'update-toast', text, level, sec });
+}
+function scanNow() {
+  if (cfg.show === 'hidden') {         // hidden = no scans (nobody is looking)
+    const text = '숨긴 동안은 스캔하지 않습니다';
+    if (!notify({ id: 'scan-now', text, level: 'warn', by: '스캐너' })) toPage({ type: 'update-toast', text, level: 'warn', sec: 3 });
+    return;
+  }
+  manualScan = { toast: notify({ id: 'scan-now', text: '스캔 중…', level: 'info', sec: 60, by: '스캐너' }) };
+  if (!manualScan.toast) toPage({ type: 'update-toast', text: '스캔 중…', level: 'info', sec: 30 });
+  if (!scan.busy) runScan();           // one already running (the minute's own) answers instead
+}
+
 async function runScan() {
   clearTimeout(scan.timer);
   scan.timer = null;
@@ -135,15 +154,22 @@ async function runScan() {
   scan.busy = true;
   toPage({ type: 'busy', on: true });
   const started = Date.now();
+  const seen = new Set(((scan.last && scan.last.posts) || []).map((p) => p.no));
   try {
     const snap = await scanner.scan(state);
     Object.assign(scan, { last: snap, okAt: Date.now(), fails: 0, error: snap.commentError ? `댓글 — ${snap.commentError}` : snap.bodyError ? `본문 — ${snap.bodyError}` : '' });
     toPage({ type: 'snapshot', ...snap });
     if (SHOT && !shotDone) takeShots();
+    if (manualScan) {
+      const fresh = snap.posts.filter((p) => !seen.has(p.no)).length;
+      scanSay(fresh ? `스캔 완료 · 새 글 ${fresh}` : '스캔 완료 · 새 글 없음', 'info', 3);
+    }
   } catch (e) {
     scan.fails += 1;
     scan.error = String((e && e.message) || e);
+    if (manualScan) scanSay(`스캔 실패 — ${scan.error}`, 'warn', 6);
   } finally {
+    manualScan = null;
     scan.busy = false;
     toPage({ type: 'busy', on: false });
     scan.nextAt = started + EVERY_MS;
@@ -556,7 +582,7 @@ function menuAct(id, opt) {
   if (id.startsWith('upd-')) return uui ? uui.menuAct(id) : false;
   if (id.startsWith('toast')) return toast ? toast.menuAct(id, opt) : false;
   switch (id) {
-    case 'scan': runScan(); return false;
+    case 'scan': scanNow(); return false;
     case 'open-list': shell.openExternal(scanner.listUrl(state.src)); return false;
     case 'minimize': if (win) win.minimize(); return false;
     case 'reset-pos': saveCfg({ ...POS[cfg.align] }); place(); return false;
@@ -734,6 +760,20 @@ async function demoShots() {
   await wait(800);
   await save(ctx.window(), 'menu-role');
   ctx.close();
+  // 지금 스캔: one toast, progress then the result (review shots, not in the README)
+  notify({ id: 'scan-now', text: '스캔 중…', level: 'info', sec: 30, by: '스캐너' });
+  await wait(900);
+  await save(toast.window(), 'toast-scan');
+  notify({ id: 'scan-now', text: '스캔 완료 · 새 글 2', level: 'info', sec: 2, by: '스캐너' });
+  await wait(500);
+  await save(toast.window(), 'toast-scan-done');
+  await wait(2800);
+  // an empty 망호 tab (the designer's picture), then the posts back
+  toPage({ type: 'snapshot', ...scan.last, posts: scan.last.posts.filter((p) => p.kind === 'sub') });
+  await wait(600);
+  await save(win, 'empty-tab');
+  toPage({ type: 'snapshot', ...scan.last });
+  await wait(400);
   // the toast window: an update result and a problem that just appeared (made up)
   notify({ text: '9.9.0으로 업데이트됨', level: 'info', sec: 30, by: '업데이트' });
   notify({ text: '스캔 실패 2회 연속 — 갤러리 응답 없음', level: 'warn', sec: 30, by: '스캐너' });
