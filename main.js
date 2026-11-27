@@ -21,6 +21,7 @@ const updater = require('./updater');
 const consent = require('./consent');
 const toastLib = require('./toast-ui');
 const hitpoll = require('./hitpoll');
+const lockLib = require('./lock');
 const trayState = require('./tray-state');
 const authorsLib = require('./authors-store');
 const authorsUiLib = require('./authors-ui');
@@ -103,6 +104,7 @@ let appMode = false;
 let lostSince = 0;
 let interactive = false;          // the window takes the mouse right now (hitpoll.js decides)
 let hits = null;                  // hitpoll.js
+let lock = null;                  // lock.js (잠금)
 let lastHits = null;              // the page's last rectangles (README shots check them)
 let sizing = false;               // the height line at the bottom is being dragged
 let room;
@@ -689,6 +691,7 @@ function menuItems() {
   const items = [];
   const probs = problems();
   for (const p of probs) items.push({ type: 'info', label: `⚠ ${p}`, warn: true });
+  items.push(...(lock ? lock.topItems() : []));      // 잠금 해제 (the tray's menu, while locked)
   let value;
   let dot;
   if (scan.paused) { value = '숨긴 동안 쉼'; dot = 'idle'; }
@@ -707,6 +710,7 @@ function menuItems() {
     type: 'segment', id: 'show', label: '표시', tip: '숨기면 트레이 아이콘으로 다시 표시합니다',
     options: [['always', '항상'], ['game', '게임 앞'], ['hidden', '숨김']].map(([id, label]) => ({ id, label, on: cfg.show === id })),
   });
+  items.push(...(lock ? lock.menuItems() : []));     // 잠금 [끔 | 켬]
   items.push({
     type: 'segment', id: 'subs', label: '잠망호 표시', tip: '표시: 망호 탭에 함께 · 숨김: 읽지도 세지도 않음',
     options: [['show', '표시'], ['tab', '따로 표시'], ['hide', '숨김']].map(([id, label]) => ({ id, label, on: cfg.subs === id })),
@@ -751,6 +755,7 @@ function setSubs(mode) {
 function menuAct(id, opt) {
   if (id.startsWith('upd-')) return uui ? uui.menuAct(id) : false;
   if (id.startsWith('toast')) return toast ? toast.menuAct(id, opt) : false;
+  if (id.startsWith('lock')) return lock ? lock.menuAct(id, opt) : false;
   switch (id) {
     case 'scan': scanNow(); return false;
     case 'open-list': shell.openExternal(scanner.listUrl(state.src)); return false;
@@ -1228,10 +1233,20 @@ if (!app.requestSingleInstanceLock()) {
     createWindow();
     starting = false;                  // from here, closing the last window quits
     createTipWindow();
+    // 잠금 (lock.js): off the list 3 s -> dimmed, the mouse passes; shake on it to unlock
+    lock = lockLib.create({
+      win, zoom: () => zoom, ipc: ipcMain, toPage,
+      enabled: () => cfg.lock === true, save: (on) => saveCfg({ lock: on }),
+      appMode: () => appMode,
+      blocked: () => !!(ctx && ctx.isOpen()) || isDragging() || sizing
+        || !!(authorsUi && ((authorsUi.window() && authorsUi.window().isVisible()) || authorsUi.card())),
+      opacity: () => cfg.opacity || 1, side: () => (cfg.align === 'left' ? 'left' : 'right'),
+    });
     // click-through from the cursor position (hitpoll.js) - not from forwarded mouse moves, which
     // stop while the game (run as administrator) is in front
     hits = hitpoll.create({
       win, zoom: () => zoom,
+      sample: (p) => lock.sample(p), locked: () => lock.locked(),
       hold: () => isDragging() || sizing || appMode,
       onNear: showBars,
       get: () => interactive,
