@@ -165,6 +165,12 @@ body.wbar-left #wsizer .grab::after { left: 2px; }
 body.wbar-left #wlabel { left: 14px; }
 body.wbar-right #wlabel { right: 14px; }
 .age { flex: none; width: calc(var(--text) * 50px); text-align: right; font-size: calc(var(--text) * 10.5px); white-space: nowrap; }
+/* 시간 간략하게 (47m, user 2026-11-28): its own fixed width - the ticking counter must not jitter - and the
+   title gets the room */
+body.age-short .age { width: calc(var(--text) * 28px); }
+/* the 작성자 / 시간 heads switch how their column reads (a click; renderer.js) */
+.cols .hcol { cursor: pointer; transition: color .15s; }
+.cols .hcol:hover { color: var(--white); }
 /* not departed yet, by the post's age (user 2026-11-27): <5분 white, 5분 yellow,
    10분 orange, 20분 a cooler grey; departed (출항) the plain, darker grey */
 .post.a5 { color: var(--yellow); }

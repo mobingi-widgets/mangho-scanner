@@ -120,11 +120,16 @@ function codeOf(p, short) {
   const c = p.uid || p.ip || '';
   return short && c.length > 8 ? c.slice(0, 7) + '…' : c;
 }
-// 2단계: the user's memo on this writer (main.js fills p.memo) shows in place of the nick, in teal
-function nickCell(p, withCode) {
+// 2단계: the user's memo on this writer (main.js fills p.memo) shows in place of the nick, in teal.
+// mode: nick | code (닉(코드)) | codeonly (코드, user 2026-11-28 - "데모고래" reads "whale01", "ㅇㅇ(10.2)" "10.2"):
+// the whole code of every kind, a 고닉's id too, cut by the column only when there is no room;
+// the kind's picture stays (a 고닉's id and a 반고닉's look alike) and so does a memo (the user's own label)
+function nickCell(p, mode) {
   const cell = el('span', 'nick');
-  cell.append(el('span', `mi ${writerKind(p)[0]}`), el('span', p.memo ? 'nn memo' : 'nn', p.memo || p.nick));
-  const code = withCode && memberOf(p) !== 'fixed' ? codeOf(p, true) : '';
+  const only = mode === 'codeonly' && !p.memo && codeOf(p, false);
+  const name = p.memo || (only ? codeOf(p, false) : p.nick);
+  cell.append(el('span', `mi ${writerKind(p)[0]}`), el('span', p.memo ? 'nn memo' : only ? 'nn conly' : 'nn', name));
+  const code = mode === 'code' && memberOf(p) !== 'fixed' ? codeOf(p, true) : '';
   if (code) cell.append(el('span', 'code', `(${code})`));
   return cell;
 }
@@ -137,6 +142,16 @@ function ageText(ms) {
   if (ms < 24 * 60 * MIN) return `${Math.floor(ms / (60 * MIN))}시간`;
   return `${Math.floor(ms / (24 * 60 * MIN))}일`;
 }
+// 시간 간략하게 (user 2026-11-28, a click on the list's 시간 head): 18s · 47m · 3h · 2d in place of "47분 전" -
+// the list only (the tooltip's 작성 line, the tile and the toasts keep the words)
+let ageShort = false;
+function ageShortText(ms) {
+  if (ms < MIN) return `${Math.max(0, Math.floor(ms / 1000))}s`;
+  if (ms < 60 * MIN) return `${Math.floor(ms / MIN)}m`;
+  if (ms < 24 * 60 * MIN) return `${Math.floor(ms / (60 * MIN))}h`;
+  return `${Math.floor(ms / (24 * 60 * MIN))}d`;
+}
+const listAge = (ms) => (ms == null ? '?' : ageShort ? ageShortText(ms) : `${ageText(ms)} 전`);
 // 20 minutes without a departure counts as departed: out of the 모집 중 count (user
 // 2026-11-27). The line keeps its own colour, so it still reads differently from 출항.
 const STALE_MS = 20 * MIN;
@@ -327,6 +342,12 @@ function updateTabs(now) {
 
 // --------------------------------------------------------------------- list
 
+// the column heads' tooltips (one line, overlay-text-style)
+const HEAD_TIPS = {
+  nick: { lines: ['클릭: 코드만 / 원래대로'] },
+  age: { lines: ['클릭: 짧게 (47m) / 원래대로'] },
+};
+
 // the empty picture (index.html #empty-tab: the kind's icon broken in two over water). prefix: its ids
 // (and what refers to them) renamed - the tile's copy must not lean on the list's, which may be hidden
 function emptyPicture(kind, text, prefix) {
@@ -358,8 +379,16 @@ function draw() {
   if (!posts.length) {
     list.append(emptyPicture(tab, `${KIND[tab]} 없음..`, ''));
   } else {
+    // the column heads: 작성자 and 시간 switch how their column reads (main.js 'col'; user 2026-11-28)
     const head = el('div', 'cols');
-    head.append(el('span', 'ttl', '제목'), el('span', 'nick', '작성자'), el('span', 'age', '시간'));
+    const hNick = el('span', 'nick hcol tipm', '작성자');
+    const hAge = el('span', 'age hcol tipm', '시간');
+    hNick.tipModel = HEAD_TIPS.nick;
+    hAge.tipModel = HEAD_TIPS.age;
+    for (const [h, col] of [[hNick, 'nick'], [hAge, 'age']]) {
+      h.addEventListener('click', () => { if (!blocked()) window.mangho.ui('col', col); });
+    }
+    head.append(el('span', 'ttl', '제목'), hNick, hAge);
     list.append(head);
     for (const p of posts) {
       const row = el('div', 'post hit tipm' + (p.blocked ? ' gone blocked' : p.departed ? ` gone by-${p.departed.by}` : ''));
@@ -367,7 +396,7 @@ function draw() {
       ttl.append(svgIcon(p.kind || 'normal'), el('span', 'tt', p.title));
       if (p.pw) ttl.append(lockButton(p));
       if (p.ref && p.ref.unread) { const r = el('span', 'refb'); r.append(refIcon()); ttl.append(r); }
-      const nick = nickCell(p, nickMode === 'code');
+      const nick = nickCell(p, nickMode);
       nick.addEventListener('click', (e) => { e.stopPropagation(); if (!blocked()) copy(p, 'writer', nick); });
       row.append(ttl, nick, el('span', 'age num', ''));
       row.post = p;
@@ -394,7 +423,7 @@ function tick() {
   for (const row of document.querySelectorAll('.post')) {
     const p = row.post;
     const ms = p.t ? now - p.t : null;
-    const text = ms == null ? '?' : `${ageText(ms)} 전`;
+    const text = listAge(ms);
     const a = row.lastChild;
     if (a.textContent !== text) a.textContent = text;
     if (!p.departed && !p.blocked) {
@@ -850,6 +879,11 @@ window.mangho.onFeed((d) => {
     const mode = d.nickMode || 'off';
     document.body.classList.toggle('show-nick', mode !== 'off');
     if (mode !== nickMode) { nickMode = mode; if (snap) draw(); }
+    if (!!d.ageShort !== ageShort) {
+      ageShort = !!d.ageShort;
+      document.body.classList.toggle('age-short', ageShort);    // the column's own narrower width (style.css)
+      if (snap) tick();
+    }
     document.body.classList.toggle('wbar-left', d.wside === 'left');
     document.body.classList.toggle('wbar-right', d.wside !== 'left');
     document.body.classList.toggle('up', d.valign === 'bottom');      // content at the area's bottom

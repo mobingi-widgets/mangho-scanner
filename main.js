@@ -69,10 +69,15 @@ const WIDTH_STRIP = 8;
 // width 300 (1.8.0, user 2026-11-27): a new install shows 작성자 = 닉(코드), and at 258 the titles were cut
 // short; a saved width stays as it is. Double-click on the width bar = this width.
 const DEFAULTS = { width: 292 + WIDTH_STRIP, align: 'right', ...POS.right, valign: 'top', fyb: 0.9, show: 'always', opacity: 1, expanded: true, nickMode: 'code', tab: 'normal', role: 'all', scale: 100, text: 100, subs: 'tab', newAlert: false, newSoundVol: 0, lockShrink: false, v: 3,
+  // the column heads of the list (user 2026-11-28): 작성자 = 코드 and back to nickPrev (닉 | 닉(코드)); 시간 = 47m
+  nickPrev: 'code', ageShort: false,
   // toasts (1.6.0, as in 주간 납품): pos = top | center | bottom of the game window, min = the least level shown
   toast: { on: true, pos: 'top', min: 'info' } };
-// 작성자 칸 (user 2026-11-27): off | nick | code = 닉(코드) - the id of a 반고닉, the IP prefix of a 유동
-const NICK_MODES = ['off', 'nick', 'code'];
+// 작성자 칸 (user 2026-11-27): off | nick | code = 닉(코드) - the id of a 반고닉, the IP prefix of a 유동 |
+// codeonly = 코드 (user 2026-11-28): only the code, a 고닉's id too (the kind's picture stays). A click on the
+// list's 작성자 head goes to 코드 and back to the mode before it (cfg.nickPrev: nick or code).
+const NICK_MODES = ['off', 'nick', 'code', 'codeonly'];
+const NICK_BACK = ['nick', 'code'];
 // 잠망호 표시 (user 2026-11-27): show = 표시 (in the 망호 tab) | tab = 따로 표시 (their own tab, the
 // default - as before) | hide = 숨김 (left out of the scan: no body or comments read, not counted)
 const SUB_MODES = ['show', 'tab', 'hide'];
@@ -124,6 +129,8 @@ function loadCfg() {
   if (!saved.nickMode && 'nick' in saved) c.nickMode = saved.nick ? 'code' : 'off';
   if (c.nickMode === 'dup') c.nickMode = 'code';
   if (!NICK_MODES.includes(c.nickMode)) c.nickMode = 'code';
+  if (c.nickPrev !== 'nick') c.nickPrev = 'code';      // NICK_BACK: 닉 or 닉(코드)
+  c.ageShort = c.ageShort === true;
   // 1.5.0 and before (v1): no strip for the width bar yet
   if ((saved.v || 1) < 2 && typeof saved.width === 'number') c.width = saved.width + WIDTH_STRIP;
   // 1.6.x and before (v2): no area yet - the same fields are the area, content at its top
@@ -759,7 +766,7 @@ function onDrop(r) {
 
 function windowState() {
   // the width bar sits on the edge away from the anchored side (in a plain window: the right)
-  return { type: 'window', expanded: !!cfg.expanded, align: cfg.align, nickMode: cfg.nickMode, tab: cfg.tab, role: cfg.role, subs: cfg.subs, text: effText(),
+  return { type: 'window', expanded: !!cfg.expanded, align: cfg.align, nickMode: cfg.nickMode, ageShort: !!cfg.ageShort, tab: cfg.tab, role: cfg.role, subs: cfg.subs, text: effText(),
     wside: widthSide(), width: cfg.width, defWidth: DEFAULTS.width, valign: appMode ? 'top' : cfg.valign, wboth: anchoredFree(), tile: tiled() };
 }
 
@@ -846,8 +853,8 @@ function menuItems() {
   });
   items.push({
     type: 'segment', id: 'nickmode', label: '작성자',
-    tip: '닉(코드): 반고닉은 아이디, 유동은 IP 앞자리 · 고닉은 닉만',
-    options: [['off', '끔'], ['nick', '닉'], ['code', '닉(코드)']].map(([id, label]) => ({ id, label, on: cfg.nickMode === id })),
+    tip: '닉(코드): 반고닉은 아이디, 유동은 IP 앞자리 · 고닉은 닉만 · 코드: 코드만 (고닉도)',
+    options: [['off', '끔'], ['nick', '닉'], ['code', '닉(코드)'], ['codeonly', '코드']].map(([id, label]) => ({ id, label, on: cfg.nickMode === id })),
   });
   items.push(...(toast ? toast.menuItems() : []));      // 알림 [끔 | where]
   items.push({
@@ -890,6 +897,16 @@ function setSubs(mode) {
   if (wasHidden && !scan.busy && !DEMO && !FAKE_GAME) runScan();    // (the test runs read no gallery)
 }
 
+// a click on the list's column head (user 2026-11-28): 작성자 -> 코드 and back to the mode before it (닉 or
+// 닉(코드)); 시간 -> 47m and back. With 작성자 끔 there is no column, so no head to click.
+function colClick(col) {
+  if (col === 'nick' && NICK_BACK.includes(cfg.nickMode)) saveCfg({ nickMode: 'codeonly', nickPrev: cfg.nickMode });
+  else if (col === 'nick' && cfg.nickMode === 'codeonly') saveCfg({ nickMode: cfg.nickPrev });
+  else if (col === 'age') saveCfg({ ageShort: !cfg.ageShort });
+  else return;
+  toPage(windowState());
+}
+
 // -> keep the menu open (the line changed in place)?
 function menuAct(id, opt) {
   if (id.startsWith('upd-')) return uui ? uui.menuAct(id) : false;
@@ -905,7 +922,7 @@ function menuAct(id, opt) {
     case 'subs': setSubs(opt); return true;
     case 'newalert': saveCfg({ newAlert: opt === 'on' }); return true;
     case 'newsound': saveCfg({ newSoundVol: stepped(opt, SOUND_VOL, cfg.newSoundVol) }); previewSound(); return true;
-    case 'nickmode': if (NICK_MODES.includes(opt)) { saveCfg({ nickMode: opt }); toPage(windowState()); } return true;
+    case 'nickmode': if (NICK_MODES.includes(opt)) { saveCfg({ nickMode: opt, ...(NICK_BACK.includes(opt) ? { nickPrev: opt } : {}) }); toPage(windowState()); } return true;
     // (the open menu keeps its size until it closes; the value changes in place)
     case 'scale': saveCfg({ scale: stepped(opt, SCALE, cfg.scale) }); place(); return true;
     case 'text': saveCfg({ text: stepped(opt, TEXT, cfg.text) }); toPage(windowState()); return true;
@@ -1287,6 +1304,8 @@ ipcMain.on('ui', (_e, action, arg) => {
     saveCfg({ expanded: !!arg });
   } else if (action === 'tab') {
     saveCfg({ tab: arg === 'sub' ? 'sub' : 'normal' });
+  } else if (action === 'col') {
+    colClick(arg);
   } else if (action === 'height-drag') {
     // the height bar, arg = { on, base, min } (CSS px): followed here (dock.heightStart) - with the
     // content at the area's bottom the bar is on its top, and the window's top moves with the cursor
