@@ -224,7 +224,7 @@ function draw() {
   }
   const posts = postsOf(tab);
   if (!posts.length) {
-    list.append(el('div', 'empty', `${KIND[tab]} 없음 (${LIVE_TEXT[tab]})`));
+    list.append($(`empty-${tab}`).content.cloneNode(true));
   } else {
     const head = el('div', 'cols');
     head.append(el('span', 'ttl', '제목'), el('span', 'nick', '작성자'), el('span', 'age', '시간'));
