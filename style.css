@@ -36,7 +36,7 @@ body {
 .num { font-variant-numeric: tabular-nums; }
 
 /* pill tabs like the game's 추천 / 퀘스트 + */
-.head { display: flex; gap: 3px; justify-content: flex-end; }
+.head { display: flex; gap: 3px; justify-content: flex-end; max-width: 100%; }
 .pill {
   padding: 0 9px; border-radius: 8px 8px 0 0; font-size: 11px; line-height: 17px; color: var(--white);
   background: rgba(30, 34, 40, .75);
@@ -58,6 +58,12 @@ body {
 body:not(.expanded) .tab.on .chev::after { content: '▾'; }
 body.busy .tab.on .cnt { opacity: .5; }
 .head .tab .kicon { --ic: currentColor; --ic2: currentColor; margin-right: 3px; }
+/* the header never wraps a pill (1.6.2: '망호 10/10' folded onto two lines at the default width):
+   short of room the 내 직군 chip goes to one letter, then the tabs drop their pictures (.tight,
+   renderer.js fitHead); a pill shortens with … only if even that is not enough */
+.head .pill { white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; }
+.head .tab { flex-shrink: 1; }                    /* only the tabs give way, not the chip or the ☰ */
+.head.tight .tab .kicon { display: none; }
 #menu.warn { background: #d8493d; color: #fff; animation: pulse 1.6s ease-in-out infinite; }
 /* a newer release is out: a green dot on the ☰ (installing is in its menu) */
 #menu { position: relative; }

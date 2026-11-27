@@ -283,10 +283,11 @@ function headWidth() {
   // its natural width: when the room is short the header squeezes its pills to fit, so their
   // widths as shown never tell; measured at max-content for a moment (same frame - not painted)
   const head = document.querySelector('.head');
-  const was = head.style.width;
+  const was = [head.style.width, head.style.maxWidth];
   head.style.width = 'max-content';
+  head.style.maxWidth = 'none';            // style.css caps it at the room (a pill shortens with …)
   const w = head.getBoundingClientRect().width;
-  head.style.width = was;
+  [head.style.width, head.style.maxWidth] = was;
   return w;
 }
 function headRoom() {
@@ -295,14 +296,19 @@ function headRoom() {
   return root.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
 }
 const headTooWide = () => headWidth() > headRoom() + 0.5;
-function fitRoleChip() {
+// short of room: the chip to one letter, then the tabs without their pictures (.tight) - a pill
+// never wraps (style.css); until 1.6.1 '망호 10/10' folded onto two lines at the default width
+function fitHead() {
   const chip = $('role');
+  const head = document.querySelector('.head');
   if (chip.textContent !== ROLE_NAME[role]) chip.textContent = ROLE_NAME[role];
+  head.classList.remove('tight');
   if (headTooWide()) chip.textContent = ROLE_CHIP[role];
+  if (headTooWide()) head.classList.add('tight');
 }
 function updateRoleChip() {
   const chip = $('role');
-  fitRoleChip();
+  fitHead();
   chip.classList.toggle('set', role !== 'all');
   chip.tipModel = {
     title: '내 직군', sub: ROLE_NAME[role],
@@ -571,12 +577,20 @@ function setWidthTip(w, def) {
   if (def) defWidth = def;
   wsizer.tipModel = { lines: [`너비 ${w}px`, '끌기: 너비 바꾸기', `두 번 클릭: 기본 너비 (${defWidth}px)`] };
 }
+// the least width: the header at its most compact (one-letter chip, tabs without pictures) with
+// the widest counts a tab can show (10 posts a kind) - so a later scan cannot make it too narrow
 function headNeeds() {
   const chip = $('role');
-  const shown = chip.textContent;
-  chip.textContent = ROLE_CHIP[role];              // the minimum counts the one-letter chip
+  const head = document.querySelector('.head');
+  const cnts = [...document.querySelectorAll('.head .tab .cnt')];
+  const was = { chip: chip.textContent, tight: head.classList.contains('tight'), cnts: cnts.map((c) => c.textContent) };
+  chip.textContent = ROLE_CHIP[role];
+  head.classList.add('tight');
+  for (const c of cnts) c.textContent = '10/10';
   const min = Math.ceil(headWidth() + (window.innerWidth - headRoom()) + 4);   // + what is beside the header
-  chip.textContent = shown;
+  chip.textContent = was.chip;
+  head.classList.toggle('tight', was.tight);
+  cnts.forEach((c, i) => { c.textContent = was.cnts[i]; });
   return min;
 }
 wsizer.addEventListener('pointerdown', (e) => {
@@ -602,7 +616,7 @@ let wsizerBlock = 0;
 wsizer.addEventListener('dblclick', () => { if (!blocked() || blockUntil === wsizerBlock) window.mangho.ui('width-reset'); });
 new ResizeObserver(() => {
   fitList();
-  fitRoleChip();
+  fitHead();
   placeBubble();
   window.mangho.ui('height', $('root').getBoundingClientRect().height + 2);
 }).observe($('root'));
