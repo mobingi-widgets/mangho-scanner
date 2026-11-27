@@ -7,7 +7,7 @@
 
 ## 실행
 
-1. [릴리스](https://github.com/mobingi-widgets/mangho-scanner/releases/latest)에서 `mangho-scanner-<버전>-full.zip`을 받아 아무 폴더에 풉니다.
+1. [최신 처음 설치 파일](https://github.com/mobingi-widgets/mangho-scanner/releases/latest/download/mangho-scanner-full.zip)을 받아 아무 폴더에 풉니다([릴리스 페이지](https://github.com/mobingi-widgets/mangho-scanner/releases/latest)).
    - 릴리스의 다른 파일은 앱이 업데이트할 때 씁니다.
 2. `망호 스캐너` 폴더의 **`망호 스캐너.exe`**를 실행합니다.
    - Windows "PC 보호" 창이 뜨면 **추가 정보 → 실행** (서명되지 않은 프로그램).
