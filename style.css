@@ -201,6 +201,11 @@ body.wbar-right #wlabel { right: 14px; }
 .lockb.copied .lock { visibility: hidden; }
 .lockb.copied::after { content: '✓'; position: absolute; left: 3px; top: 50%; width: 10px; transform: translateY(-50%);
   text-align: center; font-size: 12px; line-height: 12px; font-weight: 700; color: #4ade80; }
+/* 퍼 온 글 (1.11.0, renderer.js refIcon): a dim arrow after the title, the 🔒's size and room; a click opens
+   the post like the rest of the line (its bubble says what it means) */
+.refb { display: flex; align-self: stretch; align-items: center; flex: none; padding: 0 3px; margin-right: -3px; }
+.refm { width: 10px; height: 12px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
+  opacity: .6; filter: drop-shadow(0 0 1px rgba(0,0,0,.9)); }
 .post .nick { cursor: copy; transition: opacity .3s; }
 .post .nick.copied { opacity: 1; transition: none; }
 .post .nick.copied .nn { color: #fff; text-shadow: 0 0 6px rgba(255, 255, 255, .7); }

@@ -80,6 +80,24 @@ function lockIcon() {
   return svg;
 }
 
+// 퍼 온 글 (1.11.0, user 2026-11-27 - a disclaimer, not an error): the post holds a 펌 or a link to a post of
+// this gallery that the scanner did not read (out of its range, another writer, too far) - what is there (a
+// password too) is unknown. A dim arrow after the title (and the 🔒), the 🔒's size; its bubble says it.
+// Not for a 펌 read through (its 🔒 says 원글), nor for another gallery or site.
+const REF_SAYS = ['퍼 온 글이 들어 있습니다', '원글 내용(암호 등)은 확인하지 않았습니다'];
+function refIcon() {
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 14 16');
+  svg.setAttribute('class', 'refm');
+  // an arrow coming in: down the left, round the corner, pointing right
+  for (const d of ['M2.6 3.2V7.4C2.6 9.2 4 10.6 5.8 10.6H11.6', 'M8.8 7.8L11.6 10.6L8.8 13.4']) {
+    const p = document.createElementNS(NS, 'path');
+    p.setAttribute('d', d);
+    svg.append(p);
+  }
+  return svg;
+}
+
 // ------------------------------------------------------------------ author
 // 작성자 [끔 | 닉 | 닉(코드)] (user 2026-11-27): 닉(코드) tells writers apart where the nick does
 // not - a 반고닉's account id, a 유동's IP prefix (shared by many: weaker); a 고닉's nick is its
@@ -185,9 +203,11 @@ function postModel(p) {
   const code = codeOf(p, false);
   const writer = `${p.nick}${code ? `(${code})` : ''} · ${writerKind(p)[1]}`;
   const rows = [];
-  // the party password first: the line is opened to read it (user 2026-11-27)
-  if (p.pw && p.pw.value) rows.push(['암호', p.pw.value + (p.pw.from === 'comment' ? '  (작성자 댓글)' : ''), 'pw']);
-  else if (p.pw) rows.push(['암호', '귓속말로 받기 (본문 참고)', 'pw']);
+  // the party password first: the line is opened to read it (user 2026-11-27); one had from the 펌's original
+  // (scanner.js resolveRefs, 1.11.0) says so
+  const pwName = p.pw && p.pw.inherited ? '암호 (원글)' : '암호';
+  if (p.pw && p.pw.value) rows.push([pwName, p.pw.value + (p.pw.from === 'comment' ? '  (작성자 댓글)' : ''), 'pw']);
+  else if (p.pw) rows.push([pwName, '귓속말로 받기 (본문 참고)', 'pw']);
   rows.push(['작성자', writer]);
   if (p.memo) rows.push(['메모', p.memo, 'memo']);
   rows.push(
@@ -207,6 +227,8 @@ function postModel(p) {
   else state = ['상태', `출항 (작성자 댓글 ${cmtTime(p.departed.at)})`, 'dim'];
   rows.push(state);
   const lines = [];
+  if (p.preview) lines.push(`원글: ${p.preview}`);
+  if (p.ref && p.ref.unread) lines.push(REF_SAYS.join(' — '));
   if (p.departed && p.departed.by === 'comment') lines.push(`작성자: ${said(p.departed)}`);
   else if (p.authorLast) lines.push(`작성자 최근 댓글 ${cmtTime(p.authorLast.at)}: ${said(p.authorLast)}`);
   return { title: p.title, sub: `#${p.no}`, rows, lines, note: '클릭: 글 열기 · 우클릭: 메뉴' };
@@ -242,8 +264,10 @@ let popAt = null;
 function popModel(spot) {
   const p = spot.closest('.post').post;
   if (spot.classList.contains('lockb')) {
-    return p.pw && p.pw.value ? { text: p.pw.value, note: '클릭: 복사', cls: 'pw' } : { text: '귓속말로 받기', note: '', cls: 'pw' };
+    const from = p.pw && p.pw.inherited ? '원글 · ' : '';
+    return p.pw && p.pw.value ? { text: p.pw.value, note: `${from}클릭: 복사`, cls: 'pw' } : { text: '귓속말로 받기', note: from.slice(0, -3), cls: 'pw' };
   }
+  if (spot.classList.contains('refb')) return { text: REF_SAYS[0], note: REF_SAYS[1], cls: 'ref' };
   const code = codeOf(p, false);
   // 2단계: the user's memo on this writer (main.js fills p.memo, '' = none) - a click then copies the
   // memo (main.js writerCopy decides the same way)
@@ -341,6 +365,7 @@ function draw() {
       const ttl = el('span', 'ttl');
       ttl.append(svgIcon(p.kind || 'normal'), el('span', 'tt', p.title));
       if (p.pw) ttl.append(lockButton(p));
+      if (p.ref && p.ref.unread) { const r = el('span', 'refb'); r.append(refIcon()); ttl.append(r); }
       const nick = nickCell(p, nickMode === 'code');
       nick.addEventListener('click', (e) => { e.stopPropagation(); if (!blocked()) copy(p, 'writer', nick); });
       row.append(ttl, nick, el('span', 'age num', ''));
@@ -506,8 +531,8 @@ function setHover(on) {
 }
 document.addEventListener('mousemove', (e) => {
   setHover(!!e.target.closest('.hit, #panel'));
-  // over the 🔒 or the author cell: the copy bubble instead of the line's tooltip
-  const spot = e.target.closest('.lockb, .post .nick');
+  // over the 🔒, the 퍼 온 글 mark or the author cell: its bubble instead of the line's tooltip
+  const spot = e.target.closest('.lockb, .refb, .post .nick');
   popFor(spot);
   tipFor(spot ? null : e.target.closest('.tipm'));
 });

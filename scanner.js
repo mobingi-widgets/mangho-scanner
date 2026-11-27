@@ -14,6 +14,8 @@
 // node scanner.js            one scan, printed (no Electron needed)
 'use strict';
 
+const { band } = require('./authors-store');     // a 유동's IP band - one rule for telling writers apart
+
 const BASE = 'https://gall.dcinside.com';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
 const TIMEOUT_MS = 15000;
@@ -136,10 +138,133 @@ function bodyText(html) {
     .split('\n').map((s) => s.replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n');
 }
 
-async function fetchBody(src, no) {
-  const text = bodyText(await get(viewUrl(src, no)));
+// the post page, read once: its text and the posts of this gallery it refers to (refsIn)
+async function fetchPage(src, no) {
+  const html = await get(viewUrl(src, no));
+  const text = bodyText(html);
   if (text == null) throw new Error('글 본문을 읽지 못함 (삭제됐거나 형식이 바뀜)');
-  return text;
+  return { text, refs: refsIn(html, src.gallery).filter((n) => n !== no) };
+}
+
+// ------------------------------------------------------ 펌 / links to other posts
+// A 펌 (DC's repost; user 2026-11-27, 1.11.0) has no body of its own: write_div holds only DC's loader
+// script, which fills in the original in the browser -
+//   ...pum_ajax\/get_contents";var data={"ci_t":null,"_GALLTYPE_":"","id":"enban","no":1536671}
+// so its password is the original's. A post can also link to another post of the gallery. These are only
+// followed in memory, among the posts this scan already reads (resolveRefs): never a request of their own
+// (the user: a link out of that range is not followed). Only this gallery's posts count; anything else
+// (another gallery, another site) is not a ref at all.
+const REF_HOPS = 3;              // a 펌 of a 펌 of a 펌
+const REF_MAX = 8;               // refs kept per post
+const PUM_SPAN = 4000;           // where the loader script is looked for: right where the body stops
+const LINK_RE = /(?<![\w.-])(?:https?:\/\/)?(gall|m)\.dcinside\.com\/([^\s"'<>]{1,300})/gi;
+
+// a link's host ('gall' | 'm') and what follows it -> { id, no } | null. Forms: gall …/[mgallery/]board/view/?id=X&no=N,
+// gall …/X/N (the short link), m …/board/X/N
+function linkRef(host, rest) {
+  const q = rest.indexOf('?');
+  const path = q < 0 ? rest : rest.slice(0, q);
+  const query = q < 0 ? '' : rest.slice(q + 1);
+  let m;
+  if (host === 'm') m = path.match(/^board\/(\w{1,40})\/(\d{1,12})(?!\d)/);
+  else if (/^(?:(?:mgallery|mini)\/)?board\/view\/?$/.test(path)) {
+    const id = query.match(/(?:^|&)id=(\w{1,40})(?![\w])/);
+    const no = query.match(/(?:^|&)no=(\d{1,12})(?!\d)/);
+    return id && no ? { id: id[1], no: no[1] } : null;
+  } else m = path.match(/^(\w{1,40})\/(\d{1,12})(?!\d)/);
+  return m ? { id: m[1], no: m[2] } : null;
+}
+
+// -> the numbers of this gallery's posts a post page refers to: the 펌's original first, then the body's links
+// in order (no repeats, at most REF_MAX). The links are read in the body only (the page around it lists other
+// posts); the 펌 in the loader right after it. Bounded, linear matches only (as the 1.8.1 hardening).
+function refsIn(html, gallery) {
+  html = String(html || '');
+  const i = html.indexOf('class="write_div"');
+  if (i < 0) return [];
+  const start = html.indexOf('>', i) + 1;
+  let end = html.indexOf('<script', start);
+  if (end < 0 || end - start > 300000) end = Math.min(html.length, start + 300000);
+  const out = [];
+  const add = (id, no) => {
+    const n = Number(no);
+    if (id === gallery && Number.isSafeInteger(n) && n > 0 && !out.includes(n) && out.length < REF_MAX) out.push(n);
+  };
+  const tail = html.slice(end, Math.min(html.length, end + PUM_SPAN));
+  const k = tail.indexOf('pum_ajax');
+  const g = k < 0 ? -1 : tail.indexOf('get_contents', k);
+  if (g >= 0 && g - k < 200) {
+    const m = tail.slice(g, g + 600).match(/"id":"(\w{1,40})","no":(\d{1,12})\}/);
+    if (m) add(m[1], m[2]);
+  }
+  const body = html.slice(start, end);
+  LINK_RE.lastIndex = 0;
+  let m;
+  while (out.length < REF_MAX && (m = LINK_RE.exec(body))) {
+    const r = linkRef(m[1].toLowerCase(), decode(m[2]));
+    if (r) add(r.id, r.no);
+  }
+  return out;
+}
+
+// the same writer (an inherited password must not be someone else's): the account for a 고닉 / 반고닉, the
+// nickname and IP band for a 유동 (as the 차단·메모 list tells writers apart - authors-store keyOf)
+function sameWriter(a, b) {
+  if (a.uid || b.uid) return !!a.uid && a.uid === b.uid;
+  const ba = band(a.ip);
+  return !!ba && ba === band(b.ip) && a.nick === b.nick;
+}
+
+// From a post, through its refs (depth first, at most REF_HOPS away, each post once): the first password a
+// post of the same writer that this scan reads gives of its own, and the post's refs that were read through
+// (a ref is read when its post is tracked, of the same writer, and so is everything it refers to in turn).
+function walkRefs(post, tracked) {
+  const seen = new Map([[post.no, 'open']]);         // no -> 'open' (on the way) | read through or not
+  let pw = null;
+  let src = null;
+  const through = (no, depth) => {
+    const known = seen.get(no);
+    if (known === 'open') return true;                 // a loop, or the post itself: nothing new there
+    if (known !== undefined) return known;
+    const s = tracked.get(no);
+    if (depth > REF_HOPS || !s || s.body == null || !sameWriter(post, s)) { seen.set(no, false); return false; }
+    seen.set(no, 'open');
+    if (!pw && s.ownPw && !s.ownPw.none) { pw = s.ownPw; src = s; }
+    let all = true;
+    for (const r of s.refs || []) if (!through(r, depth + 1)) all = false;
+    seen.set(no, all);
+    return all;
+  };
+  const read = (post.refs || []).filter((no) => through(no, 1));
+  return { pw, src, read };
+}
+
+// the first lines of a body, for the tooltip
+const preview = (body) => {
+  const s = String(body || '').split('\n').slice(0, 3).join(' / ');
+  return s.length > 90 ? s.slice(0, 90) + '…' : s;
+};
+
+// Every tracked post: the password it shows - its own (author comment > body > title), else one inherited
+// through its refs (marked with the original's number) - and what the page needs about its refs:
+// { no: the original to open (the 펌's first), t: its time while tracked, unread: a ref not read through }.
+// Sticky while the post is tracked: an inherited password, and the refs once read through - they outlive the
+// original leaving the range. Its 출항 / 20분 never pass on: a 펌 is a run of its own.
+function resolveRefs(posts) {
+  const tracked = new Map(posts.map((p) => [p.no, p]));
+  for (const p of posts) {
+    const refs = p.refs || [];
+    if (refs.length) {
+      const w = walkRefs(p, tracked);
+      if (w.pw) p.inherit = { pw: w.pw, src: w.src.no, preview: preview(w.src.body) };
+      p.readRefs = [...new Set([...(p.readRefs || []), ...w.read])];
+    }
+    const own = p.ownPw;
+    p.pw = own ? (own.none ? null : own) : p.inherit ? { ...p.inherit.pw, inherited: p.inherit.src } : null;
+    p.preview = !own && p.inherit && p.body === '' && p.inherit.preview ? p.inherit.preview : null;
+    const first = refs[0];
+    p.ref = first ? { no: first, t: tracked.has(first) ? tracked.get(first).t : null, unread: refs.some((r) => !p.readRefs.includes(r)) } : null;
+  }
 }
 
 // ------------------------------------------------------------ party password
@@ -174,13 +299,17 @@ function passwordIn(text, from) {
   return null;
 }
 
-// the newest word wins: an author comment (they change it there) > the body > the title
-function passwordOf({ title, body, comments }) {
+// the newest word wins: an author comment (they change it there) > the body > the title.
+// -> the password | { none: true } ("암호 없음" - also stops a 펌's original from giving one) | null
+function passwordFind({ title, body, comments }) {
   for (const c of [...(comments || [])].reverse()) {
     const pw = passwordIn(c, 'comment');
-    if (pw) return pw.none ? null : pw;
+    if (pw) return pw;
   }
-  const pw = passwordIn(body, 'body') || passwordIn(title, 'title');
+  return passwordIn(body, 'body') || passwordIn(title, 'title');
+}
+function passwordOf(post) {
+  const pw = passwordFind(post);
   return pw && !pw.none ? pw : null;
 }
 
@@ -398,12 +527,17 @@ async function scan(state, { kinds = ['normal', 'sub'] } = {}) {
       firstSeen: prev ? prev.firstSeen : (state.scans === 0 ? 0 : started),
       departed: null, authorLast: prev ? prev.authorLast : null, checked: prev ? prev.checked : null,
       body: prev ? prev.body : null, pwComments: prev ? prev.pwComments : null,
+      // 펌 / links (resolveRefs): what the page refers to, and what was had from it (kept while tracked)
+      refs: prev ? prev.refs : [], inherit: prev ? prev.inherit : null, readRefs: prev ? prev.readRefs : [],
     };
     // the post page once (again only if the title was edited): the party password lives there
     if (post.body == null || (prev && prev.title !== p.title)) {
       try {
         await pause();
-        post.body = await fetchBody(src, p.no);
+        const page = await fetchPage(src, p.no);
+        post.body = page.text;
+        if (page.refs.join() !== (post.refs || []).join()) { post.inherit = null; post.readRefs = []; }    // other refs now
+        post.refs = page.refs;
       } catch (e) {
         bodyErr = String(e.message || e);           // try again next scan
       }
@@ -437,23 +571,24 @@ async function scan(state, { kinds = ['normal', 'sub'] } = {}) {
       post.authorLast = null;
       post.checked = 0;
     }
-    post.pw = passwordOf({ title: p.title, body: post.body, comments: post.pwComments });
+    post.ownPw = passwordFind({ title: p.title, body: post.body, comments: post.pwComments });
     out.push(post);
   }
+  resolveRefs(out);                // its pw: its own, else through a 펌 / link (no request of its own)
   state.posts = new Map(out.map((p) => [p.no, p]));
   state.scans += 1;
   return {
     t: Date.now(), ms: Date.now() - started, requests, first: state.scans === 1, old, hidden,
     source: { name: src.name, gallery: src.gallery, head: src.head, keywords: src.keywords, url: listUrl(src),
       liveMin: { normal: NORMAL_LIVE_MS / 60000, sub: SUB_DEFAULT_MS / 60000 } },
-    // the page shows no bodies (only what the tooltip needs)
-    posts: out.map(({ body, pwComments, ...rest }) => rest),
+    // the page shows no bodies (only what the tooltip needs - a 펌's preview of its original)
+    posts: out.map(({ body, pwComments, ownPw, refs, inherit, readRefs, ...rest }) => rest),
     commentError: commentErr || null, bodyError: bodyErr || null,
   };
 }
 
 module.exports = { DEFAULT_SOURCE, createState, scan, listUrl, viewUrl, parseList, writerOf, readComment, byAuthor, kindOf, SUB_RULES, rolesOf,
-  bodyText, passwordIn, passwordOf, endTimeOf, liveUntil };
+  bodyText, passwordIn, passwordOf, passwordFind, endTimeOf, liveUntil, refsIn, linkRef, sameWriter, walkRefs, resolveRefs, REF_HOPS };
 
 if (require.main === module) {
   const state = createState();
@@ -467,7 +602,8 @@ if (require.main === module) {
         const why = !p.departed ? '모집' : p.departed.by === 'title' ? `출항(제목 "${p.departed.word}")`
           : `출항(댓글 ${p.departed.at || ''} ${p.departed.text || ''}${p.departed.dccons.length ? ' [디시콘 ' + p.departed.dccons.join(',') + ']' : ''})`;
         const k = p.kind === 'sub' ? ` [${p.kindRule}: ${p.kindMatch} · ~${hhmm(p.until)} ${p.untilFrom}]` : '';
-        const pw = p.pw ? (p.pw.value ? ` 🔒 "${p.pw.value}" (${p.pw.from})` : ' 🔒 (귓속말 등)') : '';
+        const pw = (p.pw ? (p.pw.value ? ` 🔒 "${p.pw.value}" (${p.pw.from}${p.pw.inherited ? ` · 원글 #${p.pw.inherited}` : ''})` : ' 🔒 (귓속말 등)') : '')
+          + (p.ref && p.ref.unread ? ` [퍼 온 글 #${p.ref.no}]` : '');
         console.log(`${hhmm(p.t)} #${p.no} [${p.replies}] ${p.title}${k}${pw} — ${p.nick} · ${why}`);
       }
     }

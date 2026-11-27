@@ -362,7 +362,15 @@ function postMenuItems(p) {
       { type: 'item', id: 'memo', label: `${who} 메모 ${e && e.memo ? '고치기' : '쓰기'}` });
   }
   items.push({ type: 'sep' }, { type: 'item', id: 'open', label: '글 열기' });
+  // 1.11.0 (user 2026-11-27): a post with a 펌 / a link to a post of this gallery - its original (the 펌's first;
+  // its age while the scanner tracks it): the original's own comments show only there
+  if (p.ref) items.push({ type: 'item', id: 'open-src', label: p.ref.t ? `원글 열기 · ${ago(p.ref.t)} 전` : '원글 열기' });
   return items;
+}
+// the original's page - built here from the scanner's gallery and a number, never a URL from the post
+function sourceUrl(p) {
+  const no = p && p.ref ? String(p.ref.no) : '';
+  return /^\d{1,12}$/.test(no) ? scanner.viewUrl(state.src, Number(no)) : null;
 }
 function postMenuAct(p, id) {
   if (id === 'copy-writer') copyPost(p.no, 'writer');
@@ -371,6 +379,7 @@ function postMenuAct(p, id) {
   else if (id === 'block' || id === 'unblock') blockWriter(p, id === 'block');
   else if (id === 'memo' && authorsUi) authorsUi.open({ edit: authorOf(p) });
   else if (id === 'open') shell.openExternal(p.url);
+  else if (id === 'open-src') { const u = sourceUrl(p); if (u) shell.openExternal(u); }
   return false;
 }
 
