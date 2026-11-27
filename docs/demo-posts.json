@@ -32,7 +32,8 @@
    "replies": 3,
    "views": 40,
    "ip": "",
-   "member": "semi"
+   "member": "semi",
+   "memo": "본캐 예시"
   },
   {
    "no": 9000099,
@@ -116,7 +117,8 @@
     ],
     "at": "11.27 00:46:24"
    },
-   "member": "guest"
+   "member": "guest",
+   "blocked": true
   },
   {
    "no": 9000094,
