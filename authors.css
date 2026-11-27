@@ -1,0 +1,63 @@
+/* The 차단·메모 관리 window (authors-ui.js): the update window's card and palette. A working first
+   look - the designer's mock-up replaces it. */
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; background: transparent; overflow: hidden; }
+body { font: 400 13px/1.45 "Malgun Gothic", "Segoe UI", system-ui, sans-serif; color: #e7e3da; user-select: none; }
+#card, .warn {
+  margin: 6px; padding: 14px 16px 12px; border-radius: 14px; background: #181c23;
+  border: 1px solid rgba(255,255,255,.14); box-shadow: 0 8px 28px rgba(0,0,0,.55);
+}
+.top { display: flex; align-items: center; margin-bottom: 10px; }
+h1 { flex: 1; margin: 0; font-size: 16px; color: #fff; }
+h2 { margin: 0 0 6px; font-size: 15px; color: #ffb35c; }
+button { font: inherit; padding: 5px 12px; border-radius: 8px; cursor: pointer; border: 1px solid rgba(255,255,255,.18); white-space: nowrap; }
+button.ghost { background: #262b35; color: #e7e3da; }
+button.primary { background: #17a88a; border-color: #17a88a; color: #fff; font-weight: 700; }
+button.primary.danger { background: #d8493d; border-color: #d8493d; }
+button.x { padding: 0 8px; background: none; border: 0; color: #9aa0ad; font-size: 18px; line-height: 1; }
+button:hover { filter: brightness(1.12); }
+button:disabled { opacity: .45; cursor: default; filter: none; }
+input[type=text] {
+  font: inherit; color: #e7e3da; background: #11141a; border: 1px solid rgba(255,255,255,.18); border-radius: 8px;
+  padding: 5px 9px; outline: none; user-select: text; min-width: 0;
+}
+input[type=text]:focus { border-color: #17a88a; }
+.add { display: flex; gap: 6px; margin-bottom: 10px; }
+.add input { flex: 1; }
+input[type=checkbox] { margin: 0; accent-color: #17a88a; }
+
+/* the list: select · 작성자 (picture, nick, kind · id) · 메모 · 안 보기 */
+.row { display: grid; grid-template-columns: 22px minmax(0, 1.2fr) minmax(0, 1fr) 46px; align-items: center; gap: 8px; padding: 5px 4px; }
+.row.head { padding: 0 4px 4px; font-size: 11px; color: #8a909c; border-bottom: 1px solid rgba(255,255,255,.08); }
+.row.head .hide { text-align: center; }
+.list { max-height: 300px; overflow-y: auto; }
+.list::-webkit-scrollbar { width: 8px; }
+.list::-webkit-scrollbar-thumb { background: rgba(255,255,255,.25); border-radius: 4px; }
+.list .row + .row { border-top: 1px solid rgba(255,255,255,.05); }
+.sel { display: flex; justify-content: center; }
+.who { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.who .mi { width: 13px; height: 13px; flex: none; }
+.names { display: flex; flex-direction: column; min-width: 0; }
+.nick { font-weight: 700; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.key { font-size: 11px; color: #9aa0ad; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.row.hidden .nick { color: #9aa0ad; text-decoration: line-through; text-decoration-color: rgba(255,255,255,.35); }
+.memo { min-width: 0; cursor: text; }
+.memo .text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #5fd3c0; }
+.memo .text.none { color: #626875; font-size: 12px; }
+.memo .text:hover { text-decoration: underline; }
+.memo input { width: 100%; padding: 3px 7px; }
+.hide { display: flex; justify-content: center; }
+.sw { position: relative; width: 30px; height: 16px; padding: 0; border: 0; border-radius: 8px; background: rgba(255,255,255,.18); }
+.sw::after { content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #cfd3da; transition: left .12s; }
+.sw.on { background: #d8493d; }
+.sw.on::after { left: 16px; background: #fff; }
+.empty { margin: 6px 4px 10px; color: #8a909c; font-size: 12px; }
+.say { min-height: 18px; margin: 6px 4px 8px; font-size: 12px; color: #9aa0ad; }
+.say.bad { color: #ff8a7e; }
+.foot { display: flex; align-items: center; gap: 6px; }
+.grow { flex: 1; }
+
+/* the warning: over the list, or alone (#confirm=) */
+.warn p { margin: 0 0 12px; color: #cfcabe; }
+body:not(.alone) .warn:not([hidden]) { position: fixed; left: 24px; right: 24px; top: 70px; z-index: 5; border-color: rgba(255,107,94,.5); }
