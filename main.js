@@ -710,7 +710,6 @@ function menuItems() {
     type: 'segment', id: 'show', label: '표시', tip: '숨기면 트레이 아이콘으로 다시 표시합니다',
     options: [['always', '항상'], ['game', '게임 앞'], ['hidden', '숨김']].map(([id, label]) => ({ id, label, on: cfg.show === id })),
   });
-  items.push(...(lock ? lock.menuItems() : []));     // 잠금 [끔 | 켬]
   items.push({
     type: 'segment', id: 'subs', label: '잠망호 표시', tip: '표시: 망호 탭에 함께 · 숨김: 읽지도 세지도 않음',
     options: [['show', '표시'], ['tab', '따로 표시'], ['hide', '숨김']].map(([id, label]) => ({ id, label, on: cfg.subs === id })),
