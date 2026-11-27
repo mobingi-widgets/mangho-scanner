@@ -2,6 +2,7 @@
    a dark translucent rounded panel, white bold text with a dark outline.
    Sizes are for a 680-DIP-tall game window; main.js zooms with the window. */
 :root {
+  --text: 1;                 /* 글자 % (main.js), the reading text only */
   --white: #ffffff;
   --soft: #e7e3da;
   --dim: #7d7973;            /* departed */
@@ -24,7 +25,7 @@
 html, body { margin: 0; background: transparent; overflow: hidden; }
 body {
   color: var(--white);
-  font: 700 12px/1.4 "Malgun Gothic", "Segoe UI", system-ui, sans-serif;
+  font: 700 calc(var(--text) * 12px)/1.4 "Malgun Gothic", "Segoe UI", system-ui, sans-serif;   /* text without a size of its own: 글자 % too */
   user-select: none;
   -webkit-font-smoothing: antialiased;
 }
@@ -38,7 +39,7 @@ body {
 /* pill tabs like the game's 추천 / 퀘스트 + */
 .head { display: flex; gap: 3px; justify-content: flex-end; max-width: 100%; }
 .pill {
-  padding: 0 9px; border-radius: 8px 8px 0 0; font-size: 11px; line-height: 17px; color: var(--white);
+  padding: 0 9px; border-radius: 8px 8px 0 0; font-size: calc(var(--text) * 11px); line-height: calc(var(--text) * 17px); color: var(--white);
   background: rgba(30, 34, 40, .75);
 }
 /* ☰: click = menu, drag = move (dock.js), so it shows the grab hand */
@@ -67,7 +68,7 @@ body.busy .tab.on .cnt { opacity: .5; }
 .head.tight .tab .kicon { display: none; }
 #menu.warn { background: #d8493d; color: #fff; animation: pulse 1.6s ease-in-out infinite; }
 /* a newer release is out: a green dot on the ☰ (installing is in its menu) */
-#menu { position: relative; }
+#menu { position: relative; font-size: 11px; }     /* the ☰ is a picture: 배율 only, not 글자 */
 #menu.upd::after {
   content: ''; position: absolute; top: 1px; right: 1px; width: 6px; height: 6px; border-radius: 50%;
   background: var(--green); box-shadow: 0 0 0 1px rgba(0,0,0,.6);
@@ -109,9 +110,9 @@ body.tab-sub .panel { border-top-color: var(--subpill); }
 /* 제목 | (작성자) | 시간 */
 .post, .cols {
   display: flex; align-items: center; gap: 6px; padding: 1px 4px; border-radius: 5px;
-  font-size: 11.5px; line-height: 17px;
+  font-size: calc(var(--text) * 11.5px); line-height: calc(var(--text) * 17px);
 }
-.cols { font-size: 9.5px; line-height: 13px; color: var(--dim); border-bottom: 1px solid var(--line); border-radius: 0; margin-bottom: 1px; }
+.cols { font-size: calc(var(--text) * 9.5px); line-height: calc(var(--text) * 13px); color: var(--dim); border-bottom: 1px solid var(--line); border-radius: 0; margin-bottom: 1px; }
 .post { cursor: pointer; color: var(--white); }
 .post + .post { border-top: 1px solid rgba(255,255,255,.05); }
 .post:hover { background: rgba(255,255,255,.10); }
@@ -121,11 +122,11 @@ body.tab-sub .panel { border-top-color: var(--subpill); }
 .ttl .tt { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 작성자 칸: nick + a small code (account id / IP prefix). Only the nick gives way (…); a wider
    overlay (the width bar) gives this column a third of the extra width, the title the rest */
-.nick { flex: 0 1 auto; display: none; align-items: baseline; min-width: 0; max-width: calc(64px + (100vw - 258px) * .35);
-  white-space: nowrap; font-size: 10.5px; opacity: .8; }
+.nick { flex: 0 1 auto; display: none; align-items: baseline; min-width: 0; max-width: calc(var(--text) * 64px + (100vw - 258px) * .35);
+  white-space: nowrap; font-size: calc(var(--text) * 10.5px); opacity: .8; }
 body.show-nick .nick { display: flex; }
 .nick .nn { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.nick .code { flex: none; margin-left: 2px; font-size: 9px; opacity: .7; font-weight: 400; }
+.nick .code { flex: none; margin-left: 2px; font-size: calc(var(--text) * 9px); opacity: .7; font-weight: 400; }
 /* the writer's kind before the nick (renderer.js writerKind; the designer's gallery-like
    pictures, user 2026-11-27): in their own colours, fainter on a dimmed line. The pictures are
    the files in author-icons/ - changed there, nothing else. 유동: none, the same room kept so the
@@ -163,7 +164,7 @@ body.wbar-left #wsizer .grab::after { left: 2px; }
 #wlabel { position: absolute; top: 24px; z-index: 4; padding: 1px 6px; border-radius: 4px; background: rgba(0,0,0,.82); color: #fff; font-size: 10.5px; white-space: nowrap; pointer-events: none; }
 body.wbar-left #wlabel { left: 14px; }
 body.wbar-right #wlabel { right: 14px; }
-.age { flex: none; width: 50px; text-align: right; font-size: 10.5px; white-space: nowrap; }
+.age { flex: none; width: calc(var(--text) * 50px); text-align: right; font-size: calc(var(--text) * 10.5px); white-space: nowrap; }
 /* not departed yet, by the post's age (user 2026-11-27): <5분 white, 5분 yellow,
    10분 orange, 20분 a cooler grey; departed (출항) the plain, darker grey */
 .post.a5 { color: var(--yellow); }
@@ -207,12 +208,12 @@ body.wbar-right #wlabel { right: 14px; }
    bubble's shape, dark; never takes the mouse */
 .pop { position: fixed; z-index: 7; pointer-events: none; padding: 3px 8px; border-radius: 6px; max-width: calc(100vw - 8px);
   background: rgba(30, 34, 40, .97); border: 1px solid var(--line); color: var(--white); text-shadow: none;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, .35); font-size: 10.5px; line-height: 14px; white-space: nowrap; }
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .35); font-size: calc(var(--text) * 10.5px); line-height: calc(var(--text) * 14px); white-space: nowrap; }
 .pop[hidden] { display: none; }
 .pop .pt { overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
 .pop.pw .pt { color: #ffe2a3; }
 .pop .pm { overflow: hidden; text-overflow: ellipsis; color: #5fd3c0; }      /* 2단계: the user's memo */
-.pop .pn { font-size: 9px; line-height: 12px; color: var(--dim); }
+.pop .pn { font-size: calc(var(--text) * 9px); line-height: calc(var(--text) * 12px); color: var(--dim); }
 .pop::after { content: ''; position: absolute; left: var(--cx, 50%); bottom: -4px; margin-left: -4px;
   border: 4px solid transparent; border-bottom: 0; border-top-color: rgba(30, 34, 40, .97); }
 .pop.below::after { bottom: auto; top: -4px; border-top: 0; border-bottom: 4px solid rgba(30, 34, 40, .97); }
@@ -220,11 +221,11 @@ body.wbar-right #wlabel { right: 14px; }
 /* 내 직군 chip (first in the header): 모 = no filter; a chosen role is teal */
 .pill.role { cursor: pointer; padding: 0 6px; color: var(--soft); }
 .pill.role.set { background: var(--teal); color: var(--white); }
-.empty { color: var(--dim); padding: 8px 2px; text-align: center; font-size: 11px; }
+.empty { color: var(--dim); padding: 8px 2px; text-align: center; font-size: calc(var(--text) * 11px); }
 .empty-state {
   display: flex; flex-direction: column; align-items: center; gap: 5px;
   max-height: inherit; padding: 6px 2px 10px;
-  color: #b9c0cb; font-size: 12px; font-weight: 600; line-height: 16px;
+  color: #b9c0cb; font-size: calc(var(--text) * 12px); font-weight: 600; line-height: calc(var(--text) * 16px);
 }
 .empty-state svg { display: block; width: 164px; max-width: 100%; height: auto; min-height: 0; color: #8d9199; }
 #empty-tab-symbol .line { fill: none; stroke: currentColor; stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round; }

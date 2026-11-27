@@ -67,7 +67,7 @@ const WIDTH_STRIP = 8;
 // the content-sized window had; fyb = its bottom edge once the content sits at the bottom
 // width 300 (1.8.0, user 2026-11-27): a new install shows 작성자 = 닉(코드), and at 258 the titles were cut
 // short; a saved width stays as it is. Double-click on the width bar = this width.
-const DEFAULTS = { width: 292 + WIDTH_STRIP, align: 'right', ...POS.right, valign: 'top', fyb: 0.9, show: 'always', opacity: 1, expanded: true, nickMode: 'code', tab: 'normal', role: 'all', font: 'mid', subs: 'tab', v: 3,
+const DEFAULTS = { width: 292 + WIDTH_STRIP, align: 'right', ...POS.right, valign: 'top', fyb: 0.9, show: 'always', opacity: 1, expanded: true, nickMode: 'code', tab: 'normal', role: 'all', scale: 100, text: 100, subs: 'tab', v: 3,
   // toasts (1.6.0, as in 주간 납품): pos = top | center | bottom of the game window, min = the least level shown
   toast: { on: true, pos: 'top', min: 'info' } };
 // 작성자 칸 (user 2026-11-27): off | nick | code = 닉(코드) - the id of a 반고닉, the IP prefix of a 유동
@@ -75,9 +75,20 @@ const NICK_MODES = ['off', 'nick', 'code'];
 // 잠망호 표시 (user 2026-11-27): show = 표시 (in the 망호 tab) | tab = 따로 표시 (their own tab, the
 // default - as before) | hide = 숨김 (left out of the scan: no body or comments read, not counted)
 const SUB_MODES = ['show', 'tab', 'hide'];
-// 글자 작게/중간/크게 (user 2026-11-27): times the zoom that follows the game window's size;
-// everything of this program takes it (overlay, tooltip, menu, update window, notice)
-const FONT_SCALE = { small: 0.85, mid: 1, large: 1.2 };
+// 배율 % and 글자 % (user 2026-11-27, 1.9.0 - people play at different in-game UI scales):
+// - 배율 (cfg.scale) times the zoom that follows the game window's size; every window of this
+//   program takes it (overlay, tooltip, menu, toasts, update window, notice, 차단·메모 관리)
+// - 글자 (cfg.text) only the reading text of the list and the tooltip (--text in style.css and
+//   tip.html): icons, bars, padding and the width stay; rows grow, so the area shows fewer
+// Until 1.8.x one setting, 글자 작게/중간/크게 = 배율 85/100/120 % - it becomes 배율 90/100/120 (loadCfg).
+const SCALE = { min: 70, max: 150, step: 10 };
+const TEXT = { min: 80, max: 150, step: 10 };
+const FONT_TO_SCALE = { small: 90, mid: 100, large: 120 };
+// -> v on the range's steps, within it; nothing usable (missing, empty, not a number) = def
+const stepped = (v, r, def) => {
+  const n = v == null || v === '' ? NaN : Math.round(Number(v) / r.step) * r.step;
+  return Number.isFinite(n) ? Math.max(r.min, Math.min(r.max, n)) : def;
+};
 const WIDTH_MAX_OF_GAME = 0.4;   // the width bar stops at 40% of the game window
 
 let win = null;
@@ -114,7 +125,10 @@ function loadCfg() {
   if ((saved.v || 1) < 3) c.valign = 'top';
   cfgOlder = Object.keys(saved).length > 0 && (saved.v || 1) < DEFAULTS.v;     // written once in the new form
   if (c.valign !== 'bottom') c.valign = 'top';
-  if (!FONT_SCALE[c.font]) c.font = 'mid';
+  if (saved.scale == null && saved.font) c.scale = FONT_TO_SCALE[saved.font] || 100;    // 1.8.x 글자 -> 배율
+  c.scale = stepped(c.scale, SCALE, 100);
+  c.text = stepped(c.text, TEXT, 100);
+  delete c.font;
   if (!SUB_MODES.includes(c.subs)) c.subs = 'tab';
   if (c.subs !== 'tab' && c.tab === 'sub') c.tab = 'normal';     // that tab is not there
   delete c.nick;
@@ -347,7 +361,7 @@ async function blockWriter(p, on) {
 function startAuthors() {
   authors = authorsLib.create({ file: path.join(app.getPath('userData'), 'authors.json') });
   authorsUi = authorsUiLib.create({
-    dir: __dirname, store: authors, title: '망호 스캐너', zoom: () => FONT_SCALE[cfg.font] || 1,
+    dir: __dirname, store: authors, title: '망호 스캐너', zoom: () => cfg.scale / 100,
     near: () => (win && !win.isDestroyed() ? win.getBounds() : null),
   });
   // a change in the list shows at once (memo, 차단), not at the next scan
@@ -523,7 +537,7 @@ function raise() {
 function place() {
   if (!win || win.isDestroyed() || isDragging()) return;
   const g = gameRectDip();
-  const z = (g ? Math.max(0.75, Math.min(1.6, g.height / REF_GAME_HEIGHT)) : 1) * (FONT_SCALE[cfg.font] || 1);
+  const z = (g ? Math.max(0.75, Math.min(1.6, g.height / REF_GAME_HEIGHT)) : 1) * (cfg.scale / 100);
   if (Math.abs(z - zoom) > 0.01) {
     zoom = z;
     win.webContents.setZoomFactor(zoom);
@@ -613,7 +627,7 @@ function onDrop(r) {
 
 function windowState() {
   // the width bar sits on the edge away from the anchored side (in a plain window: the right)
-  return { type: 'window', expanded: !!cfg.expanded, align: cfg.align, nickMode: cfg.nickMode, tab: cfg.tab, role: cfg.role, subs: cfg.subs,
+  return { type: 'window', expanded: !!cfg.expanded, align: cfg.align, nickMode: cfg.nickMode, tab: cfg.tab, role: cfg.role, subs: cfg.subs, text: cfg.text,
     wside: widthSide(), width: cfg.width, defWidth: DEFAULTS.width, valign: appMode ? 'top' : cfg.valign, wboth: anchoredFree() };
 }
 
@@ -703,10 +717,8 @@ function menuItems() {
     options: [['off', '끔'], ['nick', '닉'], ['code', '닉(코드)']].map(([id, label]) => ({ id, label, on: cfg.nickMode === id })),
   });
   items.push(...(toast ? toast.menuItems() : []));      // 알림 [끔 | where]
-  items.push({
-    type: 'segment', id: 'font', label: '글자',
-    options: [['small', '작게', 'fs1'], ['mid', '중간', 'fs2'], ['large', '크게', 'fs3']].map(([id, label, cls]) => ({ id, label, face: '가', cls, on: cfg.font === id })),
-  });
+  items.push({ type: 'stepper', id: 'scale', label: '배율', value: cfg.scale, unit: '%', ...SCALE, tip: '목록·메뉴·말풍선 전체 크기' });
+  items.push({ type: 'stepper', id: 'text', label: '글자', value: cfg.text, unit: '%', ...TEXT, tip: '목록·툴팁의 글자만' });
   items.push({
     type: 'segment', id: 'opacity', label: '투명도',
     options: [1, 0.9, 0.8, 0.7, 0.6].map((o) => ({ id: String(o), label: String(Math.round(o * 100)), on: Math.abs((cfg.opacity || 1) - o) < 0.01 })),
@@ -748,7 +760,9 @@ function menuAct(id, opt) {
     case 'show': setShow(opt); return opt !== 'hidden';
     case 'subs': setSubs(opt); return true;
     case 'nickmode': if (NICK_MODES.includes(opt)) { saveCfg({ nickMode: opt }); toPage(windowState()); } return true;
-    case 'font': if (FONT_SCALE[opt]) { saveCfg({ font: opt }); place(); } return false;   // the menu itself changes size
+    // (the open menu keeps its size until it closes; the value changes in place)
+    case 'scale': saveCfg({ scale: stepped(opt, SCALE, cfg.scale) }); place(); return true;
+    case 'text': saveCfg({ text: stepped(opt, TEXT, cfg.text) }); toPage(windowState()); return true;
     case 'opacity': setOpacity(Number(opt)); return true;
     case 'notice': consent.ask({ dir: __dirname, title: NOTICE_TITLE, mode: 'view', zoom }); return false;
     case 'quit': app.quit(); return false;
@@ -933,13 +947,13 @@ async function demoShots() {
   await save(win, 'nick-width');
   await js("document.body.classList.remove('wsizing')");
   toPage({ type: 'width', width: 340, live: false });
-  // 글자 크게 (x1.2): the whole overlay grows with it
-  saveCfg({ width: DEFAULTS.width + 24, font: 'large' });
+  // 배율 120 %: the whole overlay grows with it
+  saveCfg({ width: DEFAULTS.width + 24, scale: 120 });
   place();
   demoWindow();
   await wait(700);
   await save(win, 'font-large');
-  saveCfg({ font: 'mid' });
+  saveCfg({ scale: 100 });
   place();
   await wait(600);
   if (await js("window.__tipTest('.post.rolex')")) { await wait(700); await save(tipWin, 'tooltip'); }
@@ -1107,7 +1121,7 @@ ipcMain.on('ui', (_e, action, arg) => {
     placeTip();
     if (arg && tipWin && !tipWin.isDestroyed()) {
       tipSeq += 1;
-      tipWin.webContents.send('feed', { type: 'tip', model: arg.model, seq: tipSeq });
+      tipWin.webContents.send('feed', { type: 'tip', model: arg.model, seq: tipSeq, text: cfg.text / 100 });
     }
   } else if (action === 'menu') {
     popupMenu();
@@ -1203,7 +1217,7 @@ if (!app.requestSingleInstanceLock()) {
       const guard = app.isPackaged && uui.hasPrevious();
       // started fine (an update waiting on update-ok.json must not roll back while the notice is read)
       const onShown = () => updater.markHealthy(path.join(app.getPath('userData'), 'update-ok.json'), app.getVersion());
-      const answer = await consent.ask({ dir: __dirname, title: NOTICE_TITLE, mode: guard ? 'guard' : 'ask', onShown, zoom: FONT_SCALE[cfg.font] || 1 });
+      const answer = await consent.ask({ dir: __dirname, title: NOTICE_TITLE, mode: guard ? 'guard' : 'ask', onShown, zoom: cfg.scale / 100 });
       if (answer === 'rollback') { uui.rollback(); return; }
       if (answer !== true) { app.quit(); return; }
       saveCfg({ notice: noticeV, noticeAt: new Date().toISOString(), noticeDeclined: null });

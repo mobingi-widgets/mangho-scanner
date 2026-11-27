@@ -8,25 +8,26 @@
   /* the box's size must not depend on the window's: width = its own content (capped),
      otherwise sizing the window to the box re-wraps the text and the two chase each other */
   * { box-sizing: border-box; }
+  :root { --text: 1; }      /* 글자 % (main.js sends it with each tooltip) */
   html, body { margin: 0; background: transparent; overflow: hidden; }
-  body { font: 700 11px/1.35 "Malgun Gothic", "Segoe UI", system-ui, sans-serif; color: #e7e3da; user-select: none; }
+  body { font: 700 calc(var(--text) * 11px)/1.35 "Malgun Gothic", "Segoe UI", system-ui, sans-serif; color: #e7e3da; user-select: none; }
   #tip {
-    position: absolute; left: 0; top: 0; width: max-content; max-width: 300px; padding: 6px 8px; border-radius: 9px;
+    position: absolute; left: 0; top: 0; width: max-content; max-width: calc(var(--text) * 300px); padding: 6px 8px; border-radius: 9px;
     background: rgba(14, 17, 22, .94); border: 1px solid rgba(255,255,255,.16);
     box-shadow: 0 4px 14px rgba(0,0,0,.45);
   }
-  .t { color: #fff; font-size: 11.5px; margin-bottom: 3px; display: flex; gap: 6px; align-items: baseline; }
+  .t { color: #fff; font-size: calc(var(--text) * 11.5px); margin-bottom: 3px; display: flex; gap: 6px; align-items: baseline; }
   .t .main { white-space: normal; }
-  .t .sub { color: #9aa0ad; font-size: 10px; font-weight: 400; white-space: nowrap; }
+  .t .sub { color: #9aa0ad; font-size: calc(var(--text) * 10px); font-weight: 400; white-space: nowrap; }
   table { border-collapse: collapse; }
   td { padding: 0 5px 0 0; white-space: nowrap; }
   .kv td:first-child { color: #9aa0ad; font-weight: 400; padding-right: 10px; }
   .good { color: #4fd68f; } .dim { color: #9aa0ad; } .bad { color: #ff6b5e; } .other { color: #a9a2b8; }
   /* the party password: the one thing read off this tooltip, so larger, the padlock's brass */
-  .pw { color: #ffd98a; font-size: 13px; letter-spacing: .2px; }
+  .pw { color: #ffd98a; font-size: calc(var(--text) * 13px); letter-spacing: .2px; }
   .memo { color: #5fd3c0; }                 /* 2단계: the user's memo on the writer */
   .line { white-space: pre-wrap; margin-top: 2px; }
-  .note { color: #9aa0ad; font-weight: 400; font-size: 10px; margin-top: 3px; white-space: pre-wrap; }
+  .note { color: #9aa0ad; font-weight: 400; font-size: calc(var(--text) * 10px); margin-top: 3px; white-space: pre-wrap; }
 </style>
 </head>
 <body>

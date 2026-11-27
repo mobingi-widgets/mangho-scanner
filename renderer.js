@@ -739,6 +739,8 @@ window.mangho.onFeed((d) => {
     document.body.classList.toggle('wboth', !!d.wboth);              // the anchored side's width bar too
     placeBubble();                       // the ☰ may have moved to the other end
     if (d.width) setWidthTip(d.width, d.defWidth);
+    // 글자 % (1.9.0): the reading text only (style.css --text); rows grow, the header fits again
+    if (d.text) { document.documentElement.style.setProperty('--text', String(d.text / 100)); fitHead(); fitList(); placeBubble(); }
     if (d.subs && d.subs !== subs) setSubs(d.subs);
     if (d.tab && d.tab !== tab) showTab(d.tab);
     if (d.role && d.role !== role) setRole(d.role);

@@ -37,6 +37,8 @@ let seq = 0;
 window.mangho.onFeed((d) => {
   if (d.type !== 'tip') return;
   seq = d.seq;
+  // 글자 % (main.js): the reading text and the box's cap grow, measured below at that size
+  document.documentElement.style.setProperty('--text', String(d.text || 1));
   render(d.model);
   // measured at once (getBoundingClientRect lays the page out): an animation frame may
   // never come while this window sits at opacity 0, and then the tooltip never showed
