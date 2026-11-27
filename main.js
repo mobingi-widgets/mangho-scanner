@@ -68,7 +68,7 @@ const WIDTH_STRIP = 8;
 // the content-sized window had; fyb = its bottom edge once the content sits at the bottom
 // width 300 (1.8.0, user 2026-11-27): a new install shows 작성자 = 닉(코드), and at 258 the titles were cut
 // short; a saved width stays as it is. Double-click on the width bar = this width.
-const DEFAULTS = { width: 292 + WIDTH_STRIP, align: 'right', ...POS.right, valign: 'top', fyb: 0.9, show: 'always', opacity: 1, expanded: true, nickMode: 'code', tab: 'normal', role: 'all', scale: 100, text: 100, subs: 'tab', v: 3,
+const DEFAULTS = { width: 292 + WIDTH_STRIP, align: 'right', ...POS.right, valign: 'top', fyb: 0.9, show: 'always', opacity: 1, expanded: true, nickMode: 'code', tab: 'normal', role: 'all', scale: 100, text: 100, subs: 'tab', newAlert: false, v: 3,
   // toasts (1.6.0, as in 주간 납품): pos = top | center | bottom of the game window, min = the least level shown
   toast: { on: true, pos: 'top', min: 'info' } };
 // 작성자 칸 (user 2026-11-27): off | nick | code = 닉(코드) - the id of a 반고닉, the IP prefix of a 유동
@@ -130,6 +130,7 @@ function loadCfg() {
   if (saved.scale == null && saved.font) c.scale = FONT_TO_SCALE[saved.font] || 100;    // 1.8.x 글자 -> 배율
   c.scale = stepped(c.scale, SCALE, 100);
   c.text = stepped(c.text, TEXT, 100);
+  c.newAlert = c.newAlert === true;                 // 새 망호 알림: off unless turned on
   delete c.font;
   if (!SUB_MODES.includes(c.subs)) c.subs = 'tab';
   if (c.subs !== 'tab' && c.tab === 'sub') c.tab = 'normal';     // that tab is not there
@@ -195,7 +196,10 @@ async function runScan() {
   toPage({ type: 'busy', on: true });
   const started = Date.now();
   const seen = new Set(((scan.last && scan.last.posts) || []).map((p) => p.no));
+  const first = !scan.last;                         // since the app started: everything would be new
+  const subsWereHidden = !!scan.subsHidden;          // their 잠망호 were never read: not news now
   try {
+    scan.subsHidden = cfg.subs === 'hide';
     const snap = await scanner.scan(state, { kinds: cfg.subs === 'hide' ? ['normal'] : ['normal', 'sub'] });
     Object.assign(scan, { last: snap, okAt: Date.now(), fails: 0, error: snap.commentError ? `댓글 — ${snap.commentError}` : snap.bodyError ? `본문 — ${snap.bodyError}` : '' });
     toPage({ type: 'snapshot', ...withAuthors(snap) });
@@ -203,7 +207,7 @@ async function runScan() {
     if (manualScan) {
       const fresh = snap.posts.filter((p) => !seen.has(p.no) && !(authors && authors.hidden(p))).length;   // 차단 is not news
       scanSay(fresh ? `스캔 완료 · 새 글 ${fresh}` : '스캔 완료 · 새 글 없음', 'info', 3);
-    }
+    } else if (!first) alertNew(snap, seen, subsWereHidden);   // (지금 스캔 says 새 글 itself)
   } catch (e) {
     scan.fails += 1;
     scan.error = String((e && e.message) || e);
@@ -277,6 +281,46 @@ function writerCopy(p) {
   const memo = authors ? authors.memo(p) : '';
   return memo ? { what: '메모', text: memo } : { what: '닉네임', text: p.nick };
 }
+// 새 망호 알림 [끔 | 켬] (user 2026-11-27, 1.9.0; off for everyone until turned on): an automatic scan's
+// posts not in the scan before that are 모집 중 - not 출항, not 20분+, not 직군 다름 (내 직군), not by a writer
+// the user blocked, no 잠망호 while they are hidden (the page's stateOf decides the same for its colours).
+const NEW_STALE_MS = 20 * 60 * 1000;
+function newRecruits(posts, seen, { now, role, blocked, noSub }) {
+  return posts.filter((p) => !seen.has(p.no)
+    && !p.departed
+    && !(p.t && now - p.t >= NEW_STALE_MS)
+    && !(role && role !== 'all' && Array.isArray(p.roles) && p.roles.length > 0 && !p.roles.includes(role))
+    && !(blocked && blocked(p))
+    && !(noSub && p.kind === 'sub'));
+}
+// The toast of one kind (the user's layout): "[icons] 새 망호 [icons]" over the newest title (cut with …
+// at the toast's width); several: "새 망호 3개" over "{title} 외 2"; all titles in its tooltip.
+// -> { two: the two-line toast, one: the same in one line }
+const NEW_KIND = { normal: { name: '새 망호', icon: 'whale' }, sub: { name: '새 잠망호', icon: 'submarine' } };
+function newPostToast(kind, list) {
+  const k = NEW_KIND[kind] || NEW_KIND.normal;
+  const head = list.length === 1 ? k.name : `${k.name} ${list.length}개`;
+  const sub = list.length === 1 ? list[0].title : `${list[0].title} 외 ${list.length - 1}`;
+  const common = { level: 'action', sec: 8, by: '스캐너', detail: list.map((p) => `· ${p.title}`).join('\n') };
+  return { two: { ...common, text: head, icon: k.icon, sub }, one: { ...common, text: `${head} · ${sub}` } };
+}
+// One toast per kind (ids new-normal / new-sub), each changing in place while it is up. Level 'action': the
+// user asked for these, so no 알림 등급 setting filters them out (they still expire, 8 s). While the game is
+// not on screen they go without an id, in one line: the toast window keeps them for its summary line when the
+// game is back (a toast with an id is never kept) - and one line is what that summary can quote.
+function alertNew(snap, seen, subsWereHidden) {
+  if (!cfg.newAlert) return;
+  const list = newRecruits(snap.posts, seen, { now: Date.now(), role: cfg.role,
+    blocked: (p) => !!(authors && authors.hidden(p)), noSub: cfg.subs === 'hide' || subsWereHidden });
+  const onScreen = gameVisible();
+  for (const kind of ['normal', 'sub']) {
+    const posts = list.filter((p) => (p.kind || 'normal') === kind);
+    if (!posts.length) continue;
+    const t = newPostToast(kind, posts);
+    notify(onScreen ? { id: `new-${kind}`, ...t.two } : t.one);
+  }
+}
+
 // -> { text ('' = nothing to copy), say }
 function copyOf(p, what) {
   if (what === 'pw') {
@@ -720,6 +764,10 @@ function menuItems() {
     options: [['off', '끔'], ['nick', '닉'], ['code', '닉(코드)']].map(([id, label]) => ({ id, label, on: cfg.nickMode === id })),
   });
   items.push(...(toast ? toast.menuItems() : []));      // 알림 [끔 | where]
+  items.push({
+    type: 'segment', id: 'newalert', label: '새 망호 알림', tip: '자동 스캔이 새로 찾은 모집 중인 글을 알림으로 띄웁니다',
+    options: [['off', '끔'], ['on', '켬']].map(([id, label]) => ({ id, label, on: cfg.newAlert === (id === 'on') })),
+  });
   items.push({ type: 'stepper', id: 'scale', label: '배율', value: cfg.scale, unit: '%', ...SCALE, tip: '목록·메뉴·말풍선 전체 크기' });
   items.push({ type: 'stepper', id: 'text', label: '글자', value: cfg.text, unit: '%', ...TEXT, tip: '목록·툴팁의 글자만' });
   items.push({
@@ -763,6 +811,7 @@ function menuAct(id, opt) {
     case 'reset-pos': saveCfg({ ...POS[cfg.align], valign: 'top' }); toPage(windowState()); place(); return false;
     case 'show': setShow(opt); return opt !== 'hidden';
     case 'subs': setSubs(opt); return true;
+    case 'newalert': saveCfg({ newAlert: opt === 'on' }); return true;
     case 'nickmode': if (NICK_MODES.includes(opt)) { saveCfg({ nickMode: opt }); toPage(windowState()); } return true;
     // (the open menu keeps its size until it closes; the value changes in place)
     case 'scale': saveCfg({ scale: stepped(opt, SCALE, cfg.scale) }); place(); return true;
