@@ -180,7 +180,8 @@ body.wbar-right #wlabel { right: 14px; }
   max-height: inherit; padding: 6px 2px 10px;
   color: #b9c0cb; font-size: 12px; font-weight: 600; line-height: 16px;
 }
-.empty-state svg { display: block; width: 154px; max-width: 100%; height: auto; min-height: 0; color: #777b82; }
+.empty-state svg { display: block; width: 164px; max-width: 100%; height: auto; min-height: 0; color: #8d9199; }
+#empty-tab-symbol .line { fill: none; stroke: currentColor; stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round; }
 .empty-state span { flex: none; }
 
 /* the height line under the open list: drag = the overlay's height limit (user 2026-11-27);

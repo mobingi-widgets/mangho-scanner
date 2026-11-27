@@ -224,7 +224,10 @@ function draw() {
   }
   const posts = postsOf(tab);
   if (!posts.length) {
-    list.append($(`empty-${tab}`).content.cloneNode(true));
+    const empty = $('empty-tab').content.cloneNode(true);
+    empty.getElementById('empty-tab-symbol').append(...svgIcon(tab).children);
+    empty.querySelector('span').textContent = `${KIND[tab]} 없음..`;
+    list.append(empty);
   } else {
     const head = el('div', 'cols');
     head.append(el('span', 'ttl', '제목'), el('span', 'nick', '작성자'), el('span', 'age', '시간'));
