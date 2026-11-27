@@ -22,6 +22,8 @@ const consent = require('./consent');
 const toastLib = require('./toast-ui');
 const hitpoll = require('./hitpoll');
 const trayState = require('./tray-state');
+const authorsLib = require('./authors-store');
+const authorsUiLib = require('./authors-ui');
 
 // The notice (이용 안내, notice.html - its <meta name="notice-version"> is the version): nothing
 // starts - no gallery reads, no window tracking, no update check - until it is agreed to.
@@ -63,7 +65,9 @@ const WIDTH_STRIP = 8;
 // v3 (1.7.0): the window is the area the user set (dock.areaRect) - align + dx + width + fy +
 // maxH as before describe it with the content at its top (valign 'top'), the same picture as
 // the content-sized window had; fyb = its bottom edge once the content sits at the bottom
-const DEFAULTS = { width: 250 + WIDTH_STRIP, align: 'right', ...POS.right, valign: 'top', fyb: 0.9, show: 'always', opacity: 1, expanded: true, nickMode: 'code', tab: 'normal', role: 'all', font: 'mid', subs: 'tab', v: 3,
+// width 300 (1.8.0, user 2026-11-27): a new install shows 작성자 = 닉(코드), and at 258 the titles were cut
+// short; a saved width stays as it is. Double-click on the width bar = this width.
+const DEFAULTS = { width: 292 + WIDTH_STRIP, align: 'right', ...POS.right, valign: 'top', fyb: 0.9, show: 'always', opacity: 1, expanded: true, nickMode: 'code', tab: 'normal', role: 'all', font: 'mid', subs: 'tab', v: 3,
   // toasts (1.6.0, as in 주간 납품): pos = top | center | bottom of the game window, min = the least level shown
   toast: { on: true, pos: 'top', min: 'info' } };
 // 작성자 칸 (user 2026-11-27): off | nick | code = 닉(코드) - the id of a 반고닉, the IP prefix of a 유동
@@ -178,10 +182,10 @@ async function runScan() {
   try {
     const snap = await scanner.scan(state, { kinds: cfg.subs === 'hide' ? ['normal'] : ['normal', 'sub'] });
     Object.assign(scan, { last: snap, okAt: Date.now(), fails: 0, error: snap.commentError ? `댓글 — ${snap.commentError}` : snap.bodyError ? `본문 — ${snap.bodyError}` : '' });
-    toPage({ type: 'snapshot', ...snap });
+    toPage({ type: 'snapshot', ...withAuthors(snap) });
     if (SHOT && !shotDone) takeShots();
     if (manualScan) {
-      const fresh = snap.posts.filter((p) => !seen.has(p.no)).length;
+      const fresh = snap.posts.filter((p) => !seen.has(p.no) && !(authors && authors.hidden(p))).length;   // 차단 is not news
       scanSay(fresh ? `스캔 완료 · 새 글 ${fresh}` : '스캔 완료 · 새 글 없음', 'info', 3);
     }
   } catch (e) {
@@ -254,7 +258,8 @@ function notify(m) {
 const postByNo = (no) => (scan.last ? scan.last.posts.find((x) => x.no === Number(no)) : null);
 // what the writer copies - the one place that decides (2단계: the user's memo first, then the nick)
 function writerCopy(p) {
-  return { what: '닉네임', text: p.nick };
+  const memo = authors ? authors.memo(p) : '';
+  return memo ? { what: '메모', text: memo } : { what: '닉네임', text: p.nick };
 }
 // -> { text ('' = nothing to copy), say }
 function copyOf(p, what) {
@@ -262,7 +267,7 @@ function copyOf(p, what) {
     if (p.pw && p.pw.value) return { text: p.pw.value, say: '암호 복사함' };
     return { text: '', say: p.pw ? '암호는 귓속말로 받습니다' : '암호 없음' };
   }
-  const w = writerCopy(p);
+  const w = what === 'nick' ? { what: '닉네임', text: p.nick } : writerCopy(p);
   return { text: w.text, say: `${w.what} 복사함 · ${w.text}` };
 }
 function copyPost(no, what) {
@@ -282,15 +287,65 @@ function copyPost(no, what) {
 function postMenuItems(p) {
   const w = writerCopy(p);
   const items = [{ type: 'item', id: 'copy-writer', label: `${w.what} 복사하기 · ${w.text}` }];
+  if (w.what === '메모') items.push({ type: 'item', id: 'copy-nick', label: `닉네임 복사하기 · ${p.nick}` });
   if (p.pw && p.pw.value) items.push({ type: 'item', id: 'copy-pw', label: '암호 복사하기' });
+  // 2단계 (user 2026-11-27): 차단 - a 고닉 / 반고닉 by account, a 유동 by IP band (asks first) - and 메모
+  const k = authors && authorsLib.keyOf(p);
+  if (k) {
+    const e = authors.get(k);
+    const who = k.kind === 'ip' ? '이 IP 대역' : p.nick;
+    items.push({ type: 'sep' },
+      e && e.hidden ? { type: 'item', id: 'unblock', label: `${who} 차단 해제` } : { type: 'item', id: 'block', label: `${who} 차단` },
+      { type: 'item', id: 'memo', label: e && e.memo ? '메모 고치기' : '메모 쓰기' });
+  }
   items.push({ type: 'sep' }, { type: 'item', id: 'open', label: '글 열기' });
   return items;
 }
 function postMenuAct(p, id) {
   if (id === 'copy-writer') copyPost(p.no, 'writer');
+  else if (id === 'copy-nick') copyPost(p.no, 'nick');
   else if (id === 'copy-pw') copyPost(p.no, 'pw');
+  else if (id === 'block' || id === 'unblock') blockWriter(p, id === 'block');
+  else if (id === 'memo' && authorsUi) authorsUi.open({ edit: authorOf(p) });
   else if (id === 'open') shell.openExternal(p.url);
   return false;
+}
+
+// ------------------------------------------------------------ 차단 · 메모
+// 2단계 (user 2026-11-27): the user's own list (authors-store.js, authors.json) - per writer 차단 and
+// a 메모 (e.g. the in-game name). Each post sent to the page carries both: a 차단 line counts as
+// departed, fainter still, out of 모집 중 and of "새 글"; a memo shows in the author cell in place of
+// the nick and is what a click copies. ☰ → 차단·메모 관리 = the list's window (authors-ui.js).
+let authors = null;
+let authorsUi = null;
+function withAuthors(snap) {
+  if (!authors || !snap || !snap.posts) return snap;
+  return { ...snap, posts: snap.posts.map((p) => ({ ...p, memo: authors.memo(p), blocked: authors.hidden(p) })) };
+}
+// the writer as the list keeps it (what was seen when it was registered)
+function authorOf(p) {
+  const k = authorsLib.keyOf(p);
+  return k ? { ...k, member: k.kind === 'ip' ? 'guest' : p.member || '', nick: p.nick } : null;
+}
+async function blockWriter(p, on) {
+  const a = authorOf(p);
+  if (!a || !authors) return;
+  // a band hides other people of the same carrier too: the user says so first (a card of its own)
+  if (on && a.kind === 'ip' && !(await authorsUi.confirmBand(a.key))) return;
+  authors.set(a, { hidden: on, member: a.member, nick: a.nick });
+  const who = a.kind === 'ip' ? `IP 대역 ${a.key}` : a.nick;
+  notify({ id: 'block', text: on ? `${who} 차단함` : `${who} 차단 해제함`, level: 'info', sec: 2, by: '스캐너' });
+}
+function startAuthors() {
+  authors = authorsLib.create({ file: path.join(app.getPath('userData'), 'authors.json') });
+  authorsUi = authorsUiLib.create({
+    dir: __dirname, store: authors, title: '망호 스캐너', zoom: () => FONT_SCALE[cfg.font] || 1,
+    near: () => (win && !win.isDestroyed() ? win.getBounds() : null),
+  });
+  // a change in the list shows at once (memo, 차단), not at the next scan
+  authors.onChange(() => { if (scan.last) toPage({ type: 'snapshot', ...withAuthors(scan.last) }); });
+  // a file it could not read was kept aside (authors.json.broken-…) and a new list started: said once
+  if (authors.loadError()) setTimeout(() => notify({ text: '차단·메모 목록을 읽지 못해 새로 시작합니다 (예전 파일은 옆에 남김)', level: 'warn', by: '스캐너' }), 5000);
 }
 
 // ----------------------------------------------------------------- tooltips
@@ -618,6 +673,7 @@ function menuItems() {
   });
   items.push({ type: 'item', id: 'scan', label: '지금 스캔' });
   items.push({ type: 'item', id: 'open-list', label: '갤러리 열기', tip: '망호 말머리 목록 · 브라우저' });
+  items.push({ type: 'item', id: 'authors', label: '차단·메모 관리' });
   if (appMode) items.push({ type: 'item', id: 'minimize', label: '창 최소화' });
   items.push({ type: 'sep' });
   items.push({
@@ -673,6 +729,7 @@ function menuAct(id, opt) {
   switch (id) {
     case 'scan': scanNow(); return false;
     case 'open-list': shell.openExternal(scanner.listUrl(state.src)); return false;
+    case 'authors': if (authorsUi) authorsUi.open(); return false;
     case 'minimize': if (win) win.minimize(); return false;
     case 'reset-pos': saveCfg({ ...POS[cfg.align], valign: 'top' }); toPage(windowState()); place(); return false;
     case 'show': setShow(opt); return opt !== 'hidden';
@@ -760,7 +817,7 @@ function createWindow() {
     room = undefined;
     lastProblems = '';
     pushProblems();
-    if (scan.last) toPage({ type: 'snapshot', ...scan.last });
+    if (scan.last) toPage({ type: 'snapshot', ...withAuthors(scan.last) });
     if (uui) uui.pageState();
     // an update waits for this, else it rolls back
     updater.markHealthy(path.join(app.getPath('userData'), 'update-ok.json'), app.getVersion());
@@ -1117,7 +1174,8 @@ if (!app.requestSingleInstanceLock()) {
     if (process.env.UPDATE_DEMO) { await uui.demo(process.env.UPDATE_DEMO); app.quit(); return; }
     if (process.env.MOBINGI_UPDATE_SELFTEST) { await uui.selfTest(process.env.MOBINGI_UPDATE_SELFTEST); return; }
     const noticeV = consent.noticeVersion(__dirname);
-    if (!SHOT && !DEMO && (cfg.notice || 0) < noticeV) {
+    // (a test run over a stand-in game - FAKE_GAME, own settings folder - never puts the notice on the screen)
+    if (!SHOT && !DEMO && !FAKE_GAME && (cfg.notice || 0) < noticeV) {
       // first run, or this version's notice is newer than the agreed one (e.g. a zip put over
       // by hand): ask before anything starts; with the old version kept aside, offer going back
       const guard = app.isPackaged && uui.hasPrevious();
@@ -1129,6 +1187,7 @@ if (!app.requestSingleInstanceLock()) {
       saveCfg({ notice: noticeV, noticeAt: new Date().toISOString(), noticeDeclined: null });
     }
     if (cfg.source) state.src = { ...state.src, ...cfg.source };
+    startAuthors();
     createTray();
     createWindow();
     starting = false;                  // from here, closing the last window quits

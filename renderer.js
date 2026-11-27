@@ -102,9 +102,10 @@ function codeOf(p, short) {
   const c = p.uid || p.ip || '';
   return short && c.length > 8 ? c.slice(0, 7) + '…' : c;
 }
+// 2단계: the user's memo on this writer (main.js fills p.memo) shows in place of the nick, in teal
 function nickCell(p, withCode) {
   const cell = el('span', 'nick');
-  cell.append(el('span', `mi ${writerKind(p)[0]}`), el('span', 'nn', p.nick));
+  cell.append(el('span', `mi ${writerKind(p)[0]}`), el('span', p.memo ? 'nn memo' : 'nn', p.memo || p.nick));
   const code = withCode && memberOf(p) !== 'fixed' ? codeOf(p, true) : '';
   if (code) cell.append(el('span', 'code', `(${code})`));
   return cell;
@@ -143,8 +144,10 @@ function setSubs(mode) {
   if (subs !== 'tab' && tab === 'sub') showTab('normal');
   else draw();
 }
-// precedence: 출항 > 20분 지남 > 직군 다름 > age colours; only the last counts as 모집 중
+// precedence: 차단 > 출항 > 20분 지남 > 직군 다름 > age colours; only the last counts as 모집 중.
+// 차단 (2단계, main.js p.blocked): the user's own list - shown like 출항, fainter still
 function stateOf(p, now) {
+  if (p.blocked) return 'blocked';
   if (p.departed) return 'gone';
   if (isStale(p, now)) return 'stale';
   if (notMine(p)) return 'other';
@@ -152,7 +155,7 @@ function stateOf(p, now) {
 }
 function tally(kind, now) {
   const posts = postsOf(kind);
-  const c = { total: posts.length, gone: 0, stale: 0, other: 0, open: 0 };
+  const c = { total: posts.length, gone: 0, stale: 0, other: 0, open: 0, blocked: 0 };
   for (const p of posts) c[stateOf(p, now)] += 1;
   return c;
 }
@@ -185,8 +188,9 @@ function postModel(p) {
   // the party password first: the line is opened to read it (user 2026-11-27)
   if (p.pw && p.pw.value) rows.push(['암호', p.pw.value + (p.pw.from === 'comment' ? '  (작성자 댓글)' : ''), 'pw']);
   else if (p.pw) rows.push(['암호', '귓속말로 받기 (본문 참고)', 'pw']);
+  rows.push(['작성자', writer]);
+  if (p.memo) rows.push(['메모', p.memo, 'memo']);
   rows.push(
-    ['작성자', writer],
     ['작성', p.t ? `${hhmm(p.t)} · ${ageText(now - p.t)} 전` : '?'],
     ['댓글 · 조회', `${p.replies} · ${p.views}`],
   );
@@ -195,7 +199,8 @@ function postModel(p) {
     rows.push(['직군', p.roleText, role === 'all' ? '' : notMine(p) ? 'other' : 'good']);
   }
   let state;
-  if (isStale(p, now)) state = ['상태', '20분 지남', 'dim'];
+  if (p.blocked) state = ['상태', '차단', 'dim'];
+  else if (isStale(p, now)) state = ['상태', '20분 지남', 'dim'];
   else if (!p.departed && notMine(p)) state = ['상태', '직군 다름', 'other'];
   else if (!p.departed) state = ['상태', '모집 중', 'good'];
   else if (p.departed.by === 'title') state = ['상태', '출항 (제목)', 'dim'];
@@ -275,6 +280,7 @@ function tabModel(kind, c) {
     rows: [['모집 중', String(c.open), 'good'],
       ...(role !== 'all' ? [['직군 다름', String(c.other), 'other']] : []),
       ['20분 지남', String(c.stale), 'dim'], ['출항', String(c.gone), 'dim'],
+      ...(c.blocked ? [['차단', String(c.blocked), 'dim']] : []),
       ['보는 범위', mixed ? LIVE_TEXT.mixed : LIVE_TEXT[kind]],
       ['마지막 스캔', `${hhmm(snap.t)} · 요청 ${snap.requests}회`]],
     note: kind === tab ? '클릭: 목록 접기 / 펼치기' : '',
@@ -316,7 +322,7 @@ function draw() {
     head.append(el('span', 'ttl', '제목'), el('span', 'nick', '작성자'), el('span', 'age', '시간'));
     list.append(head);
     for (const p of posts) {
-      const row = el('div', 'post hit tipm' + (p.departed ? ` gone by-${p.departed.by}` : ''));
+      const row = el('div', 'post hit tipm' + (p.blocked ? ' gone blocked' : p.departed ? ` gone by-${p.departed.by}` : ''));
       const ttl = el('span', 'ttl');
       ttl.append(svgIcon(p.kind || 'normal'), el('span', 'tt', p.title));
       if (p.pw) ttl.append(lockButton(p));
@@ -350,7 +356,7 @@ function tick() {
     const text = ms == null ? '?' : `${ageText(ms)} 전`;
     const a = row.lastChild;
     if (a.textContent !== text) a.textContent = text;
-    if (!p.departed) {
+    if (!p.departed && !p.blocked) {
       const st = stateOf(p, now);
       const cls = st === 'stale' ? 'a20' : st === 'other' ? 'rolex' : ms == null ? '' : ageClass(ms);
       for (const c of ['a5', 'a10', 'a20', 'rolex']) row.classList.toggle(c, c === cls);
@@ -654,7 +660,7 @@ sizer.addEventListener('dblclick', () => { if (!blocked()) window.mangho.ui('max
 // cursor - the window moves under it), double-click = the default width. Never narrower than
 // the header needs (headNeeds counts the strip too: it is the window's width beside the header).
 const wsizer = $('wsizer');
-let defWidth = 258;
+let defWidth = 300;
 function setWidthTip(w, def) {
   if (def) defWidth = def;
   wsizer.tipModel = { lines: [`너비 ${w}px`, '끌기: 너비 바꾸기', `두 번 클릭: 기본 너비 (${defWidth}px)`] };

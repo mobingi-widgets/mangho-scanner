@@ -83,8 +83,8 @@ function memoCell(e) {
       if (done) return;
       done = true;
       editing = null;
-      if (save && inp.value.trim() !== (e.memo || '')) set(e, { memo: inp.value.trim() });
-      else draw();
+      if (save && inp.value.trim() !== (e.memo || '')) set(e, { memo: inp.value.trim(), ...(e.temp ? { member: e.member, nick: e.nick } : {}) });
+      else { if (e.temp) entries = entries.filter((x) => x !== e); draw(); }
     };
     inp.addEventListener('keydown', (ev) => {
       if (ev.key === 'Enter') { ev.preventDefault(); finish(true); }
@@ -183,6 +183,12 @@ window.authors.on((d) => {
     memoMax = d.memoMax || memoMax;
     const have = new Set(entries.map(kid));
     for (const k of [...selected]) if (!have.has(k)) selected.delete(k);
+    draw();
+  } else if (d.type === 'edit' && d.entry) {
+    // the overlay's 메모 쓰기 / 고치기: that writer's memo field (a new row if not in the list yet)
+    let e = entries.find((x) => kid(x) === kid(d.entry));
+    if (!e) { e = { ...d.entry, memo: '', hidden: false, temp: true }; entries = [e, ...entries]; }
+    editing = kid(e);
     draw();
   } else if (d.type === 'confirm') {
     askWarn(d.key.key, () => window.authors.ui('add', { text: $('addtext').value, confirmed: true }));

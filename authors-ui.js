@@ -55,14 +55,22 @@ function create(o) {
     return w;
   }
 
-  function open() {
-    if (alive(win)) { send(win, list()); win.moveTop(); return; }
+  // open({ edit? }): edit = { kind, key, member, nick } - from the overlay's right-click 메모 쓰기 /
+  // 고치기: that writer's memo field, ready to type (the window takes the keyboard then - asked for)
+  function open({ edit } = {}) {
+    const go = () => {
+      send(win, list());
+      if (!edit) return;
+      send(win, { type: 'edit', entry: edit });
+      if (!o.test) { win.show(); win.focus(); }
+    };
+    if (alive(win)) { go(); win.moveTop(); return; }
     win = makeWindow(W, '', '차단·메모 관리');
     win.webContents.on('did-finish-load', () => {
       win.webContents.setZoomFactor(zoom());
-      send(win, list());
       placeAt(win, W, height);
       if (!o.test) win.showInactive();         // never takes the keyboard by itself
+      go();
     });
     win.on('closed', () => { win = null; });
   }
