@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="notice-version" content="3">
+<meta name="notice-version" content="4">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'sha256-1PKXk10vqcNDlfz2MQiZE/spAWYa3siael28NmywQy0='">
 <title>망호 스캐너 — 이용 안내</title>
 <link rel="stylesheet" href="notice.css">
@@ -45,7 +45,7 @@
     </div>
     <div>
       <dt>이 PC</dt>
-      <dd>설정·창 위치·동의 시각·업데이트 기록을 저장합니다. <b>게시글·댓글·파티 암호는 파일로 남기지 않습니다.</b></dd>
+      <dd>설정·창 위치·동의 시각·업데이트 기록과, 직접 등록한 <b>작성자 안 보기·메모 목록</b>을 저장합니다. <b>게시글·댓글·파티 암호는 파일로 남기지 않습니다.</b></dd>
     </div>
     <div>
       <dt>외부 연결</dt>
@@ -78,7 +78,8 @@
   <ul>
     <li><code>%APPDATA%\mangho-scanner\</code>에 화면 설정, 안내 판과 동의 시각, 업데이트 기록(<code>update.log</code>)을 저장합니다.</li>
     <li>다른 오버레이와 겹치지 않도록 <code>%APPDATA%\mabimo-overlays\mangho-scanner.json</code>에 창 위치를 기록합니다.</li>
-    <li>게시글·댓글·작성자 정보·파티 암호는 스캐너가 동작하는 동안 메모리에만 둡니다. 광고와 사용 추적은 없습니다.</li>
+    <li>☰ → <b>차단·메모 관리</b>에 등록한 작성자(계정 식별자 또는 유동 IP 앞 두 자리, 등록할 때의 닉네임, 메모, 안 보기 여부)를 <code>%APPDATA%\mangho-scanner\authors.json</code>에 저장합니다. 등록한 것만 남습니다. 내보내기 파일은 사용자가 고른 곳에 저장합니다.</li>
+    <li>게시글·댓글·파티 암호와 등록하지 않은 작성자 정보는 스캐너가 동작하는 동안 메모리에만 둡니다. 광고와 사용 추적은 없습니다.</li>
   </ul>
 
   <h2>접속과 업데이트</h2>
@@ -90,11 +91,12 @@
   <h2>다시 보기와 삭제</h2>
   <ul>
     <li>☰ → <b>이용 안내 보기</b>에서 다시 볼 수 있습니다.</li>
+    <li>차단·메모 목록만 지우려면 ☰ → <b>차단·메모 관리</b>에서 지웁니다.</li>
     <li>삭제하려면 ☰ → 종료 후 프로그램 폴더와 <code>%APPDATA%\mangho-scanner\</code>를 지웁니다. 공용 <code>mabimo-overlays</code> 폴더에서는 <code>mangho-scanner.json</code> 파일이 남아 있을 때만 그 파일을 지웁니다.</li>
   </ul>
 </main>
 <footer>
-  <span class="ver">이용 안내 3판 · 2026-11-27</span>
+  <span class="ver">이용 안내 4판 · 2026-11-27</span>
   <span id="buttons"></span>
 </footer>
 <script src="notice.js"></script>
