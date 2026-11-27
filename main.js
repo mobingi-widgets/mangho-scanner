@@ -482,7 +482,7 @@ function startTracker() {
 // Least text: states as grey values on the right, choices as one-line segments, explanations
 // in the hint line at the bottom.
 
-const ROLE_NAME = { all: '모두', heal: '힐', tank: '탱', deal: '딜' };
+const ROLE_NAME = { all: '모두', heal: '힐러', tank: '탱커', deal: '딜러' };
 
 function tabCounts(kind) {
   const role = cfg.role || 'all';

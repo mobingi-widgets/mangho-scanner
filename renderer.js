@@ -17,7 +17,8 @@ const LIVE_TEXT = { normal: '1시간 안', sub: '제목의 끝 시각까지 (없
 // its own colour (purple, icon too) and out of the 모집 중 count. 모두 = no filter.
 let role = 'all';
 const ROLES = ['all', 'heal', 'tank', 'deal'];
-const ROLE_NAME = { all: '모두', heal: '힐', tank: '탱', deal: '딜' };
+// the chip shows the full word when the header has room for it, else one letter (user 2026-11-27)
+const ROLE_NAME = { all: '모두', heal: '힐러', tank: '탱커', deal: '딜러' };
 const ROLE_CHIP = { all: '모', heal: '힐', tank: '탱', deal: '딜' };
 const notMine = (p) => role !== 'all' && Array.isArray(p.roles) && p.roles.length > 0 && !p.roles.includes(role);
 
@@ -271,10 +272,37 @@ function tick() {
   updateRoleChip();
 }
 
-// 내 직군 chip, first in the header: click cycles 모두 -> 힐 -> 탱 -> 딜
+// 내 직군 chip, first in the header: the full word (모두 · 힐러 · 탱커 · 딜러) when the header has
+// room for it, else one letter - it never makes the header wrap. Decided within one frame (no
+// flicker); again on every tick (the tab counts change width) and when the overlay is resized.
+// The header's pills side by side (CSS px), and the room the overlay gives it. The header row is
+// only as wide as its pills (it is not stretched across the overlay), so the room comes from #root
+// - measured from the header itself, the width bar's minimum was always the current width + 4 and
+// the overlay could never be made narrower (until 1.6.1 / 1.4.4).
+function headWidth() {
+  // its natural width: when the room is short the header squeezes its pills to fit, so their
+  // widths as shown never tell; measured at max-content for a moment (same frame - not painted)
+  const head = document.querySelector('.head');
+  const was = head.style.width;
+  head.style.width = 'max-content';
+  const w = head.getBoundingClientRect().width;
+  head.style.width = was;
+  return w;
+}
+function headRoom() {
+  const root = $('root');
+  const cs = getComputedStyle(root);
+  return root.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+}
+const headTooWide = () => headWidth() > headRoom() + 0.5;
+function fitRoleChip() {
+  const chip = $('role');
+  if (chip.textContent !== ROLE_NAME[role]) chip.textContent = ROLE_NAME[role];
+  if (headTooWide()) chip.textContent = ROLE_CHIP[role];
+}
 function updateRoleChip() {
   const chip = $('role');
-  chip.textContent = ROLE_CHIP[role];
+  fitRoleChip();
   chip.classList.toggle('set', role !== 'all');
   chip.tipModel = {
     title: '내 직군', sub: ROLE_NAME[role],
@@ -544,18 +572,12 @@ function setWidthTip(w, def) {
   wsizer.tipModel = { lines: [`너비 ${w}px`, '끌기: 너비 바꾸기', `두 번 클릭: 기본 너비 (${defWidth}px)`] };
 }
 function headNeeds() {
-  const head = document.querySelector('.head');
-  const cs = getComputedStyle(head);
-  const gap = parseFloat(cs.columnGap) || parseFloat(cs.gap) || 0;
-  let need = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
-  let n = 0;
-  for (const c of head.children) {
-    if (c.offsetParent === null) continue;            // hidden
-    need += c.getBoundingClientRect().width;
-    n += 1;
-  }
-  need += gap * Math.max(0, n - 1);
-  return Math.ceil(need + (window.innerWidth - head.getBoundingClientRect().width) + 4);
+  const chip = $('role');
+  const shown = chip.textContent;
+  chip.textContent = ROLE_CHIP[role];              // the minimum counts the one-letter chip
+  const min = Math.ceil(headWidth() + (window.innerWidth - headRoom()) + 4);   // + what is beside the header
+  chip.textContent = shown;
+  return min;
 }
 wsizer.addEventListener('pointerdown', (e) => {
   if (e.button !== 0 || blocked()) return;
@@ -580,6 +602,7 @@ let wsizerBlock = 0;
 wsizer.addEventListener('dblclick', () => { if (!blocked() || blockUntil === wsizerBlock) window.mangho.ui('width-reset'); });
 new ResizeObserver(() => {
   fitList();
+  fitRoleChip();
   placeBubble();
   window.mangho.ui('height', $('root').getBoundingClientRect().height + 2);
 }).observe($('root'));
