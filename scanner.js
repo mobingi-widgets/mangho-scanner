@@ -149,7 +149,7 @@ async function fetchPage(src, no) {
 // ------------------------------------------------------ 펌 / links to other posts
 // A 펌 (DC's repost; user 2026-11-27, 1.11.0) has no body of its own: write_div holds only DC's loader
 // script, which fills in the original in the browser -
-//   ...pum_ajax\/get_contents";var data={"ci_t":null,"_GALLTYPE_":"","id":"enban","no":1536671}
+//   ...pum_ajax\/get_contents";var data={"ci_t":null,"_GALLTYPE_":"","id":"enban","no":9000001}
 // so its password is the original's. A post can also link to another post of the gallery. These are only
 // followed in memory, among the posts this scan already reads (resolveRefs): never a request of their own
 // (the user: a link out of that range is not followed). Only this gallery's posts count; anything else
