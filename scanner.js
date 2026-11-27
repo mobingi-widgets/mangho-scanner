@@ -358,7 +358,9 @@ function createState(src) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function scan(state) {
+// kinds: the kinds to pick - 잠망호 표시: 숨김 leaves 'sub' out (user 2026-11-27); a kind left out
+// is only classified from the list: not shown, its bodies and comments not read
+async function scan(state, { kinds = ['normal', 'sub'] } = {}) {
   const src = state.src;
   const started = Date.now();
   let requests = 1;
@@ -368,10 +370,12 @@ async function scan(state) {
   const taken = { normal: 0, sub: 0 };
   const top = [];
   let old = 0;
+  let hidden = 0;
   for (const p of posts) {
     const k = kindOf(p.title);
     const live = liveUntil(p.title, p.t, k.kind);
     if (live.until <= started) { old += 1; continue; }
+    if (!kinds.includes(k.kind)) { hidden += 1; continue; }
     if (taken[k.kind] >= src.max) continue;
     taken[k.kind] += 1;
     top.push({ ...p, kind: k.kind, kindRule: k.rule, kindMatch: k.match, until: live.until, untilFrom: live.from, ...rolesOf(p.title) });
@@ -433,7 +437,7 @@ async function scan(state) {
   state.posts = new Map(out.map((p) => [p.no, p]));
   state.scans += 1;
   return {
-    t: Date.now(), ms: Date.now() - started, requests, first: state.scans === 1, old,
+    t: Date.now(), ms: Date.now() - started, requests, first: state.scans === 1, old, hidden,
     source: { name: src.name, gallery: src.gallery, head: src.head, keywords: src.keywords, url: listUrl(src),
       liveMin: { normal: NORMAL_LIVE_MS / 60000, sub: SUB_DEFAULT_MS / 60000 } },
     // the page shows no bodies (only what the tooltip needs)

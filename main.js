@@ -63,11 +63,14 @@ const WIDTH_STRIP = 8;
 // v3 (1.7.0): the window is the area the user set (dock.areaRect) - align + dx + width + fy +
 // maxH as before describe it with the content at its top (valign 'top'), the same picture as
 // the content-sized window had; fyb = its bottom edge once the content sits at the bottom
-const DEFAULTS = { width: 250 + WIDTH_STRIP, align: 'right', ...POS.right, valign: 'top', fyb: 0.9, show: 'always', opacity: 1, expanded: true, nickMode: 'code', tab: 'normal', role: 'all', font: 'mid', v: 3,
+const DEFAULTS = { width: 250 + WIDTH_STRIP, align: 'right', ...POS.right, valign: 'top', fyb: 0.9, show: 'always', opacity: 1, expanded: true, nickMode: 'code', tab: 'normal', role: 'all', font: 'mid', subs: 'tab', v: 3,
   // toasts (1.6.0, as in 주간 납품): pos = top | center | bottom of the game window, min = the least level shown
   toast: { on: true, pos: 'top', min: 'info' } };
 // 작성자 칸 (user 2026-11-27): off | nick | code = 닉(코드) - the id of a 반고닉, the IP prefix of a 유동
 const NICK_MODES = ['off', 'nick', 'code'];
+// 잠망호 표시 (user 2026-11-27): show = 표시 (in the 망호 tab) | tab = 따로 표시 (their own tab, the
+// default - as before) | hide = 숨김 (left out of the scan: no body or comments read, not counted)
+const SUB_MODES = ['show', 'tab', 'hide'];
 // 글자 작게/중간/크게 (user 2026-11-27): times the zoom that follows the game window's size;
 // everything of this program takes it (overlay, tooltip, menu, update window, notice)
 const FONT_SCALE = { small: 0.85, mid: 1, large: 1.2 };
@@ -108,6 +111,8 @@ function loadCfg() {
   cfgOlder = Object.keys(saved).length > 0 && (saved.v || 1) < DEFAULTS.v;     // written once in the new form
   if (c.valign !== 'bottom') c.valign = 'top';
   if (!FONT_SCALE[c.font]) c.font = 'mid';
+  if (!SUB_MODES.includes(c.subs)) c.subs = 'tab';
+  if (c.subs !== 'tab' && c.tab === 'sub') c.tab = 'normal';     // that tab is not there
   delete c.nick;
   return c;
 }
@@ -171,7 +176,7 @@ async function runScan() {
   const started = Date.now();
   const seen = new Set(((scan.last && scan.last.posts) || []).map((p) => p.no));
   try {
-    const snap = await scanner.scan(state);
+    const snap = await scanner.scan(state, { kinds: cfg.subs === 'hide' ? ['normal'] : ['normal', 'sub'] });
     Object.assign(scan, { last: snap, okAt: Date.now(), fails: 0, error: snap.commentError ? `댓글 — ${snap.commentError}` : snap.bodyError ? `본문 — ${snap.bodyError}` : '' });
     toPage({ type: 'snapshot', ...snap });
     if (SHOT && !shotDone) takeShots();
@@ -494,7 +499,7 @@ function onDrop(r) {
 
 function windowState() {
   // the width bar sits on the edge away from the anchored side (in a plain window: the right)
-  return { type: 'window', expanded: !!cfg.expanded, align: cfg.align, nickMode: cfg.nickMode, tab: cfg.tab, role: cfg.role,
+  return { type: 'window', expanded: !!cfg.expanded, align: cfg.align, nickMode: cfg.nickMode, tab: cfg.tab, role: cfg.role, subs: cfg.subs,
     wside: widthSide(), width: cfg.width, defWidth: DEFAULTS.width, valign: appMode ? 'top' : cfg.valign, wboth: anchoredFree() };
 }
 
@@ -574,6 +579,10 @@ function menuItems() {
     options: [['always', '항상'], ['game', '게임 앞'], ['hidden', '숨김']].map(([id, label]) => ({ id, label, on: cfg.show === id })),
   });
   items.push({
+    type: 'segment', id: 'subs', label: '잠망호 표시', tip: '표시: 망호 탭에 함께 · 숨김: 읽지도 세지도 않음',
+    options: [['show', '표시'], ['tab', '따로 표시'], ['hide', '숨김']].map(([id, label]) => ({ id, label, on: cfg.subs === id })),
+  });
+  items.push({
     type: 'segment', id: 'nickmode', label: '작성자',
     tip: '닉(코드): 반고닉은 아이디, 유동은 IP 앞자리 · 고닉은 닉만',
     options: [['off', '끔'], ['nick', '닉'], ['code', '닉(코드)']].map(([id, label]) => ({ id, label, on: cfg.nickMode === id })),
@@ -602,6 +611,15 @@ function menuItems() {
   return items;
 }
 
+// 잠망호 표시 (SUB_MODES). Out of 숨김 the 잠망호 were never read: a scan now, not in a minute.
+function setSubs(mode) {
+  if (!SUB_MODES.includes(mode) || mode === cfg.subs) return;
+  const wasHidden = cfg.subs === 'hide';
+  saveCfg({ subs: mode, ...(mode !== 'tab' && cfg.tab === 'sub' ? { tab: 'normal' } : {}) });
+  toPage(windowState());
+  if (wasHidden && !scan.busy && !DEMO && !FAKE_GAME) runScan();    // (the test runs read no gallery)
+}
+
 // -> keep the menu open (the line changed in place)?
 function menuAct(id, opt) {
   if (id.startsWith('upd-')) return uui ? uui.menuAct(id) : false;
@@ -612,6 +630,7 @@ function menuAct(id, opt) {
     case 'minimize': if (win) win.minimize(); return false;
     case 'reset-pos': saveCfg({ ...POS[cfg.align], valign: 'top' }); toPage(windowState()); place(); return false;
     case 'show': setShow(opt); return opt !== 'hidden';
+    case 'subs': setSubs(opt); return true;
     case 'nickmode': if (NICK_MODES.includes(opt)) { saveCfg({ nickMode: opt }); toPage(windowState()); } return true;
     case 'font': if (FONT_SCALE[opt]) { saveCfg({ font: opt }); place(); } return false;   // the menu itself changes size
     case 'opacity': setOpacity(Number(opt)); return true;
@@ -744,12 +763,12 @@ async function demoShots() {
   scan.last = { t: now, ms: 0, requests: 6, first: true, posts, commentError: null,
     source: { name: '에반(마비노기 모바일)', gallery: 'enban', head: 140, keywords: ['출항', '출발'], url: '' } };
   Object.assign(scan, { okAt: now - 12000, nextAt: now + 48000 });
-  saveCfg({ role: 'deal' });
+  saveCfg({ role: 'deal', subs: 'tab' });
   await js("document.body.classList.add('demo')");
   saveCfg({ width: DEFAULTS.width + 24 });           // the demo's padding (marks) on top of the usual width, less the strip it holds
   place();
   const demoWindow = (extra) => toPage({ type: 'window', expanded: true, align: 'right', nickMode: 'off', tab: 'normal', role: 'deal',
-    wside: 'left', width: cfg.width, defWidth: DEFAULTS.width, ...extra });
+    subs: 'tab', wside: 'left', width: cfg.width, defWidth: DEFAULTS.width, ...extra });
   demoWindow();
   toPage({ type: 'snapshot', ...scan.last });
   await wait(900);
@@ -768,6 +787,15 @@ async function demoShots() {
   await wait(500);
   await save(win, 'sub-tab');
   await js("window.__setTab('normal')");
+  await wait(400);
+  // 잠망호 표시: 표시 (in the 망호 tab) and 숨김, from the 잠망호 tab (review shots, not in the README)
+  for (const subs of ['show', 'hide']) {
+    await js("window.__setTab('sub')");
+    demoWindow({ subs, tab: undefined });
+    await wait(500);
+    await save(win, `subs-${subs}`);
+  }
+  demoWindow();
   await wait(400);
   // 작성자 = 닉(코드) on a wider overlay (the width bar), its live label showing
   saveCfg({ width: 364 });

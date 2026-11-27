@@ -12,7 +12,7 @@ let busy = false;
 let tab = 'normal';
 const KIND = { normal: '망호', sub: '잠망호' };
 // what each tab shows (scanner.js liveUntil; user 2026-11-27: after an hour no 망호 is alive)
-const LIVE_TEXT = { normal: '1시간 안', sub: '제목의 끝 시각까지 (없으면 8시간)' };
+const LIVE_TEXT = { normal: '1시간 안', sub: '제목의 끝 시각까지 (없으면 8시간)', mixed: '망호 1시간 · 잠망호 끝 시각까지' };
 // 내 직군 (user 2026-11-27): a post whose "랏" asks only for other roles is not for me -
 // its own colour (purple, icon too) and out of the 모집 중 count. 모두 = no filter.
 let role = 'all';
@@ -126,7 +126,23 @@ function ageClass(ms) {
   return ms >= STALE_MS ? 'a20' : ms >= 10 * MIN ? 'a10' : ms >= 5 * MIN ? 'a5' : '';
 }
 const isStale = (p, now) => !p.departed && !!p.t && now - p.t >= STALE_MS;
-const postsOf = (kind) => (snap ? snap.posts.filter((p) => (p.kind || 'normal') === kind) : []);
+// 잠망호 표시 [표시 | 따로 표시 | 숨김] (user 2026-11-27): tab = their own tab (as before); show = in
+// the 망호 tab with the others, newest first, each line keeping its icon; hide = nowhere, not counted
+// (main.js leaves them out of the scan too). show and hide have one tab.
+let subs = 'tab';
+const SUB_MODES = ['show', 'tab', 'hide'];
+function postsOf(kind) {
+  if (!snap) return [];
+  if (subs === 'show') return kind === 'normal' ? [...snap.posts].sort((a, b) => (b.t || 0) - (a.t || 0)) : [];
+  if (subs === 'hide' && kind === 'sub') return [];
+  return snap.posts.filter((p) => (p.kind || 'normal') === kind);
+}
+function setSubs(mode) {
+  subs = SUB_MODES.includes(mode) ? mode : 'tab';
+  document.body.classList.toggle('one-tab', subs !== 'tab');
+  if (subs !== 'tab' && tab === 'sub') showTab('normal');
+  else draw();
+}
 // precedence: 출항 > 20분 지남 > 직군 다름 > age colours; only the last counts as 모집 중
 function stateOf(p, now) {
   if (p.departed) return 'gone';
@@ -193,12 +209,13 @@ function postModel(p) {
 
 function tabModel(kind, c) {
   if (!snap) return { lines: ['아직 스캔 전'] };
+  const mixed = subs === 'show' && kind === 'normal';
   return {
-    title: KIND[kind], sub: snap.source.name,
+    title: mixed ? `${KIND.normal} · ${KIND.sub}` : KIND[kind], sub: snap.source.name,
     rows: [['모집 중', String(c.open), 'good'],
       ...(role !== 'all' ? [['직군 다름', String(c.other), 'other']] : []),
       ['20분 지남', String(c.stale), 'dim'], ['출항', String(c.gone), 'dim'],
-      ['보는 범위', LIVE_TEXT[kind]],
+      ['보는 범위', mixed ? LIVE_TEXT.mixed : LIVE_TEXT[kind]],
       ['마지막 스캔', `${hhmm(snap.t)} · 요청 ${snap.requests}회`]],
     note: kind === tab ? '클릭: 목록 접기 / 펼치기' : '',
   };
@@ -570,18 +587,22 @@ function setWidthTip(w, def) {
   $('wsizer2').tipModel = wsizer.tipModel;
 }
 // the least width: the header at its most compact (one-letter chip, tabs without pictures) with
-// the widest counts a tab can show (10 posts a kind) - so a later scan cannot make it too narrow
+// the widest counts a tab can show (10 posts a kind) - so a later scan cannot make it too narrow.
+// Both tabs, also while 잠망호 표시 shows one: switching back must not squeeze the header.
 function headNeeds() {
   const chip = $('role');
   const head = document.querySelector('.head');
   const cnts = [...document.querySelectorAll('.head .tab .cnt')];
-  const was = { chip: chip.textContent, tight: head.classList.contains('tight'), cnts: cnts.map((c) => c.textContent) };
+  const was = { chip: chip.textContent, tight: head.classList.contains('tight'), cnts: cnts.map((c) => c.textContent),
+    oneTab: document.body.classList.contains('one-tab') };
   chip.textContent = ROLE_CHIP[role];
   head.classList.add('tight');
+  document.body.classList.remove('one-tab');
   for (const c of cnts) c.textContent = '10/10';
   const min = Math.ceil(headWidth() + (window.innerWidth - headRoom()) + 4);   // + what is beside the header
   chip.textContent = was.chip;
   head.classList.toggle('tight', was.tight);
+  document.body.classList.toggle('one-tab', was.oneTab);
   cnts.forEach((c, i) => { c.textContent = was.cnts[i]; });
   return min;
 }
@@ -638,6 +659,7 @@ window.mangho.onFeed((d) => {
     document.body.classList.toggle('wboth', !!d.wboth);              // the anchored side's width bar too
     placeBubble();                       // the ☰ may have moved to the other end
     if (d.width) setWidthTip(d.width, d.defWidth);
+    if (d.subs && d.subs !== subs) setSubs(d.subs);
     if (d.tab && d.tab !== tab) showTab(d.tab);
     if (d.role && d.role !== role) setRole(d.role);
   } else if (d.type === 'width') {

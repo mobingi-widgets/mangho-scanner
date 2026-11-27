@@ -52,6 +52,7 @@ body {
 .tab.none .cnt { opacity: .6; }
 .tab.on[data-kind="normal"] { background: var(--whale); color: var(--white); }
 .tab.on[data-kind="sub"] { background: var(--subpill); color: var(--white); }
+body.one-tab .tab[data-kind="sub"] { display: none; }     /* 잠망호 표시: 표시 / 숨김 */
 .tab .chev { display: none; font-size: 9px; vertical-align: 1px; margin-left: 2px; }
 .tab.on .chev { display: inline; }
 .tab.on .chev::after { content: '▴'; }
