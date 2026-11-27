@@ -183,23 +183,21 @@
   - 받는 파일은 모두 이 프로그램에 들어 있는 공개키(minisign)로 서명을 확인합니다. 서명이 없거나 다르면, 버전이 지금보다
     높지 않으면, 크기·sha256이 맞지 않으면 설치하지 않습니다. HTTPS로 github.com 쪽 주소에서만 받습니다.
   - 이전 버전은 `resources\.update\previous`에 남겨 두고, 새 버전이 1분 안에 정상으로 뜨지 않으면 이전 버전으로 되돌립니다.
+  - 교체 스크립트가 시작된 것을 확인한 뒤에만 스캐너가 꺼집니다. 시작되지 않으면 지금 버전 그대로 실패를 알립니다.
   - Electron 자체가 바뀌는 버전이면 "전체 설치 필요"라고 알려 주고 릴리스 페이지를 엽니다(새 zip을 받아 풀기).
 - 설정(`%APPDATA%\mangho-scanner`)은 건드리지 않습니다. 기록은 `%APPDATA%\mangho-scanner\update.log`.
 - 소스로 실행 중이면(`망호 스캐너.bat`) 알려 주기만 합니다 — 소스는 git으로 받습니다.
 
-### 1.4.0 이하에서 1.5.0으로 — 한 번만 손으로
+### 1.5.1 이하에서 1.6.0으로 — 한 번만 손으로
 
-1.4.0까지의 업데이터는 서명 확인에 쓰는 BLAKE2b를 Electron에서 계산하지 못해(`Digest method not supported`)
-어떤 릴리스도 받지 못합니다. 그래서 1.5.0은 한 번 손으로 올립니다. 1.5.0부터는 앱 안에서 업데이트됩니다.
+- 1.5.1까지는 앱 안에서 **업데이트**를 누르면 스캐너가 꺼진 뒤 다시 켜지지 않습니다. 파일은 그대로라 다시 실행하면 원래 버전입니다.
+- 1.6.0은 한 번 손으로 올립니다. 1.6.0부터는 앱 안에서 업데이트됩니다.
 
 1. ☰ → 종료.
-2. [릴리스 v1.5.0](https://github.com/mobingi-widgets/mangho-scanner/releases/tag/v1.5.0)에서 `mangho-scanner-1.5.0-app.zip`을 받습니다
-   (Electron은 그대로라 프로그램 코드만, 수십 KB).
-3. `망호 스캐너\resources\app` 폴더를 `망호 스캐너\resources\.update\previous`로 옮기고(되돌릴 때 씀),
-   새 `resources\app` 폴더를 만들어 받은 zip을 그 안에 풉니다. (또는 `mangho-scanner-1.5.0-full.zip`을 받아 폴더째 바꿔도 됩니다.)
-4. `망호 스캐너.exe`를 실행하면 이용 안내 2판이 뜹니다 — **동의하고 시작** (**이전 버전으로 되돌리기**도 있음).
-
-설정(`%APPDATA%\mangho-scanner`)은 그대로 이어집니다. 앱 안 업데이트(업데이트 창 · 진행 막대 · 서명 확인)는 1.5.0 다음 버전부터 볼 수 있습니다.
+2. [릴리스 v1.6.0](https://github.com/mobingi-widgets/mangho-scanner/releases/tag/v1.6.0)에서 `mangho-scanner-1.6.0-app.zip`을 받습니다.
+3. `망호 스캐너\resources\app` 폴더를 `망호 스캐너\resources\.update\previous`로 옮깁니다(이미 있으면 그 폴더를 먼저 지움).
+4. 새 `resources\app` 폴더를 만들어 받은 zip을 그 안에 풉니다. (`mangho-scanner-1.6.0-full.zip`으로 폴더째 바꿔도 됩니다.)
+5. `망호 스캐너.exe` 실행. 이용 안내가 뜨면 **동의하고 시작**.
 
 ## 설정
 

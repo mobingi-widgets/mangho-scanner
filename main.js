@@ -863,6 +863,7 @@ if (!app.requestSingleInstanceLock()) {
     cfg = loadCfg();
     uui = makeUpdateUi();
     if (process.env.UPDATE_DEMO) { await uui.demo(process.env.UPDATE_DEMO); app.quit(); return; }
+    if (process.env.MOBINGI_UPDATE_SELFTEST) { await uui.selfTest(process.env.MOBINGI_UPDATE_SELFTEST); return; }
     const noticeV = consent.noticeVersion(__dirname);
     if (!SHOT && !DEMO && (cfg.notice || 0) < noticeV) {
       // first run, or this version's notice is newer than the agreed one (e.g. a zip put over
