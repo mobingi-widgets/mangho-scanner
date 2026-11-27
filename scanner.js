@@ -127,9 +127,10 @@ async function fetchBody(src, no) {
 //   "암호 : 잘자콘" · "암호 7시" · "암호는 듀우우." · "암호 -> 갈래" · "암호명 : …" · "비번:방구" ·
 //   "비번은 망하" · once mid-line ("본캐 ㄱㄱ암호 : 사랑해"); riddles ("암호는 너가 먹은 점심메뉴")
 //   are shown as written. A title only hints ("암호귓해야받을거임" = ask by whisper).
+//   "암구호 : 고래밥" too (user 2026-11-27: a new way of writing it).
 // The rest of the line after the word (and 은/는, ":", "->") is the password; a bare word with
 // it on the next line takes that line.
-const PW_RE = /(?:암호명?|비번|비밀\s*번호)(?:\s*(?:은|는))?(?=[\s:：=\->→]|귓|$)\s*(?:[:：=]|->|→|>|-)?\s*(.*)$/;
+const PW_RE = /(?:암구호|암호명?|비번|비밀\s*번호)(?:\s*(?:은|는))?(?=[\s:：=\->→]|귓|$)\s*(?:[:：=]|->|→|>|-)?\s*(.*)$/;
 const PW_NONE_RE = /^(?:없|[xX×](?:\s|$)|안\s*걸|자유|프리)/;              // "암호 없음", "암호 X"
 const PW_ASK_RE = /^(?:귓|댓글|쪽지|dm|디엠|문의)/i;                      // "암호귓해야받을거임", "암호는 귓으로"
 const PW_MAX = 40;
