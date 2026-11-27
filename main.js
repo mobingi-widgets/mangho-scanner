@@ -49,7 +49,7 @@ function makeUpdateUi() {
     // results and "x.y.z로 업데이트됨" go to the toast window; with toasts off (or below the level) the pill
     page: (m) => { if (m.type !== 'update-toast' || !notify({ text: m.text, level: m.level, sec: m.sec, by: '업데이트' })) toPage(m); },
     quit: () => app.quit(),
-    zoom: () => zoom,                  // the update window reads at the overlay's text size
+    zoom: () => baseZoom,                  // the update window reads at the overlay's text size
   });
 }
 
@@ -68,7 +68,7 @@ const WIDTH_STRIP = 8;
 // the content-sized window had; fyb = its bottom edge once the content sits at the bottom
 // width 300 (1.8.0, user 2026-11-27): a new install shows 작성자 = 닉(코드), and at 258 the titles were cut
 // short; a saved width stays as it is. Double-click on the width bar = this width.
-const DEFAULTS = { width: 292 + WIDTH_STRIP, align: 'right', ...POS.right, valign: 'top', fyb: 0.9, show: 'always', opacity: 1, expanded: true, nickMode: 'code', tab: 'normal', role: 'all', scale: 100, text: 100, subs: 'tab', newAlert: false, v: 3,
+const DEFAULTS = { width: 292 + WIDTH_STRIP, align: 'right', ...POS.right, valign: 'top', fyb: 0.9, show: 'always', opacity: 1, expanded: true, nickMode: 'code', tab: 'normal', role: 'all', scale: 100, text: 100, subs: 'tab', newAlert: false, lockShrink: false, v: 3,
   // toasts (1.6.0, as in 주간 납품): pos = top | center | bottom of the game window, min = the least level shown
   toast: { on: true, pos: 'top', min: 'info' } };
 // 작성자 칸 (user 2026-11-27): off | nick | code = 닉(코드) - the id of a 반고닉, the IP prefix of a 유동
@@ -99,6 +99,7 @@ let quitting = false;
 let game = { found: false };
 let tracker = { proc: null, error: '', dead: false };
 let height = 120;
+let baseZoom = 1;   // the zoom at the user's own 배율 (toasts, the update window, the notice - not shrunk)
 let zoom = 1;
 let appMode = false;
 let lostSince = 0;
@@ -130,6 +131,7 @@ function loadCfg() {
   if (saved.scale == null && saved.font) c.scale = FONT_TO_SCALE[saved.font] || 100;    // 1.8.x 글자 -> 배율
   c.scale = stepped(c.scale, SCALE, 100);
   c.text = stepped(c.text, TEXT, 100);
+  c.lockShrink = c.lockShrink === true;              // 잠금 때 작게: off unless turned on
   c.newAlert = c.newAlert === true;                 // 새 망호 알림: off unless turned on
   delete c.font;
   if (!SUB_MODES.includes(c.subs)) c.subs = 'tab';
@@ -592,10 +594,20 @@ function overlayRects() {
   return out;
 }
 
+// 잠금 때 [그대로 | 작게] (user 2026-11-27, 1.10.0): while locked, the overlay at the smallest 배율 and 글자 - an
+// override only: cfg.scale / cfg.text keep the user's values (on disk, in the menus, the tray's lists), so a
+// quit while locked comes back at them. Already at the smallest: nothing changes. The 🔓 shows on the
+// full-size list (lock.shrunk() is off from the unlock on).
+const shrunk = () => !!(cfg.lockShrink && lock && lock.shrunk() && !appMode);
+const effScale = () => (shrunk() ? Math.min(cfg.scale, SCALE.min) : cfg.scale);
+const effText = () => (shrunk() ? Math.min(cfg.text, TEXT.min) : cfg.text);
+
 function place() {
   if (!win || win.isDestroyed() || isDragging()) return;
   const g = gameRectDip();
-  const z = (g ? Math.max(0.75, Math.min(1.6, g.height / REF_GAME_HEIGHT)) : 1) * (cfg.scale / 100);
+  const gz = g ? Math.max(0.75, Math.min(1.6, g.height / REF_GAME_HEIGHT)) : 1;
+  baseZoom = gz * (cfg.scale / 100);
+  const z = gz * (effScale() / 100);                 // (the smallest while locked with 잠금 때 작게)
   if (Math.abs(z - zoom) > 0.01) {
     zoom = z;
     win.webContents.setZoomFactor(zoom);
@@ -685,7 +697,7 @@ function onDrop(r) {
 
 function windowState() {
   // the width bar sits on the edge away from the anchored side (in a plain window: the right)
-  return { type: 'window', expanded: !!cfg.expanded, align: cfg.align, nickMode: cfg.nickMode, tab: cfg.tab, role: cfg.role, subs: cfg.subs, text: cfg.text,
+  return { type: 'window', expanded: !!cfg.expanded, align: cfg.align, nickMode: cfg.nickMode, tab: cfg.tab, role: cfg.role, subs: cfg.subs, text: effText(),
     wside: widthSide(), width: cfg.width, defWidth: DEFAULTS.width, valign: appMode ? 'top' : cfg.valign, wboth: anchoredFree() };
 }
 
@@ -783,6 +795,10 @@ function menuItems() {
   items.push({ type: 'stepper', id: 'scale', label: '배율', value: cfg.scale, unit: '%', ...SCALE, tip: '목록·메뉴·말풍선 전체 크기' });
   items.push({ type: 'stepper', id: 'text', label: '글자', value: cfg.text, unit: '%', ...TEXT, tip: '목록·툴팁의 글자만' });
   items.push({
+    type: 'segment', id: 'lockshrink', label: '잠금 때', tip: '작게: 잠긴 동안 배율·글자를 가장 작게 줄입니다',
+    options: [['off', '그대로'], ['on', '작게']].map(([id, label]) => ({ id, label, on: !!cfg.lockShrink === (id === 'on') })),
+  });
+  items.push({
     type: 'segment', id: 'opacity', label: '투명도',
     options: [1, 0.9, 0.8, 0.7, 0.6].map((o) => ({ id: String(o), label: String(Math.round(o * 100)), on: Math.abs((cfg.opacity || 1) - o) < 0.01 })),
   });
@@ -814,7 +830,7 @@ function setSubs(mode) {
 function menuAct(id, opt) {
   if (id.startsWith('upd-')) return uui ? uui.menuAct(id) : false;
   if (id.startsWith('toast')) return toast ? toast.menuAct(id, opt) : false;
-  if (id.startsWith('lock')) return lock ? lock.menuAct(id, opt) : false;
+  if (id.startsWith('lock-')) return lock ? lock.menuAct(id, opt) : false;   // lock-release (the tray, while locked)
   switch (id) {
     case 'scan': scanNow(); return false;
     case 'open-list': shell.openExternal(scanner.listUrl(state.src)); return false;
@@ -828,8 +844,9 @@ function menuAct(id, opt) {
     // (the open menu keeps its size until it closes; the value changes in place)
     case 'scale': saveCfg({ scale: stepped(opt, SCALE, cfg.scale) }); place(); return true;
     case 'text': saveCfg({ text: stepped(opt, TEXT, cfg.text) }); toPage(windowState()); return true;
+    case 'lockshrink': saveCfg({ lockShrink: opt === 'on' }); place(); toPage(windowState()); return true;
     case 'opacity': setOpacity(Number(opt)); return true;
-    case 'notice': consent.ask({ dir: __dirname, title: NOTICE_TITLE, mode: 'view', zoom, avoid: overlayRects }); return false;
+    case 'notice': consent.ask({ dir: __dirname, title: NOTICE_TITLE, mode: 'view', zoom: baseZoom, avoid: overlayRects }); return false;
     case 'quit': app.quit(); return false;
     default: return false;
   }
@@ -1300,6 +1317,7 @@ if (!app.requestSingleInstanceLock()) {
       appMode: () => appMode,
       blocked: () => !!(ctx && ctx.isOpen()) || isDragging() || sizing
         || !!(authorsUi && ((authorsUi.window() && authorsUi.window().isVisible()) || authorsUi.card())),
+      onState: () => { if (cfg.lockShrink) { place(); toPage(windowState()); } },   // 잠금 때 작게
       opacity: () => cfg.opacity || 1, side: () => (cfg.align === 'left' ? 'left' : 'right'),
     });
     // click-through from the cursor position (hitpoll.js) - not from forwarded mouse moves, which
@@ -1322,7 +1340,7 @@ if (!app.requestSingleInstanceLock()) {
     toast = toastLib.create({
       dir: __dirname, title: '망호 스캐너 알림', source: '스캐너',
       settings: () => cfg.toast, save: (p) => saveCfg({ toast: { ...cfg.toast, ...p } }),
-      gameRect: gameRectDip, gameVisible, zoom: () => zoom, always: !!SHOT || !!DEMO,
+      gameRect: gameRectDip, gameVisible, zoom: () => baseZoom, always: !!SHOT || !!DEMO,
     });
     dock = dockLib.create({
       win, name: SHOT ? 'mangho-scanner-shot' : DEMO ? 'mangho-scanner-demo' : FAKE_GAME ? 'mangho-scanner-test' : 'mangho-scanner', title: '망호 스캐너',
