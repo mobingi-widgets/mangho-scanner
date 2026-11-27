@@ -510,49 +510,25 @@ function startTracker() {
 
 const ROLE_NAME = { all: '모두', heal: '힐러', tank: '탱커', deal: '딜러' };
 
-function tabCounts(kind) {
-  const role = cfg.role || 'all';
-  const posts = scan.last.posts.filter((p) => (p.kind || 'normal') === kind);
-  const c = { total: posts.length, gone: 0, stale: 0, other: 0, open: 0 };
-  for (const p of posts) {
-    if (p.departed) c.gone += 1;
-    else if (p.t && Date.now() - p.t >= 20 * 60 * 1000) c.stale += 1;
-    else if (role !== 'all' && p.roles && p.roles.length && !p.roles.includes(role)) c.other += 1;
-    else c.open += 1;
-  }
-  return c;
-}
-
+// The menu diet (user 2026-11-27): the state is one title line ("● 19초 전"; the tab tooltips
+// have the counts), choices are pictures where they can be, the update is one line.
 function menuItems() {
   const items = [];
-  for (const p of problems()) items.push({ type: 'info', label: `⚠ ${p}`, warn: true });
-  items.push({ type: 'title', label: `🐳 ${state.src.name} · 망호` });
-  let scanValue;
-  if (scan.paused) scanValue = '숨긴 동안 쉼';
-  else if (scan.okAt) scanValue = `${ago(scan.okAt)} 전 · 다음 ${Math.max(0, Math.round((scan.nextAt - Date.now()) / 1000))}초`;
-  else scanValue = scan.busy ? '첫 스캔 중' : `아직 못 함${scan.error ? ` — ${scan.error}` : ''}`;
-  items.push({ type: 'info', label: '스캔', value: scanValue });
-  if (scan.last) {
-    for (const [kind, label] of [['normal', '망호'], ['sub', '잠망호']]) {
-      const c = tabCounts(kind);
-      items.push({ type: 'info', label, value: `모집 ${c.open}${cfg.role && cfg.role !== 'all' ? ` · 직군 다름 ${c.other}` : ''} · 20분+ ${c.stale} · 출항 ${c.gone} / ${c.total}` });
-    }
-  }
-  if (game.found) {
-    const [, , w, h] = game.rect || [0, 0, 0, 0];
-    items.push({ type: 'info', label: '게임 창', value: `${w}×${h} · ${game.minimized ? '최소화' : game.front === 'game' ? '앞' : '뒤'}` });
-  } else {
-    items.push({ type: 'info', label: '게임 창', value: appMode ? '없음 → 창 모드' : '찾는 중' });
-  }
-  items.push({ type: 'sep' });
-  items.push(...(uui ? uui.menuItems() : []));
-  items.push({ type: 'sep' });
+  const probs = problems();
+  for (const p of probs) items.push({ type: 'info', label: `⚠ ${p}`, warn: true });
+  let value;
+  let dot;
+  if (scan.paused) { value = '숨긴 동안 쉼'; dot = 'idle'; }
+  else if (scan.okAt) { value = `${ago(scan.okAt)} 전`; dot = probs.length ? 'bad' : 'ok'; }
+  else { value = scan.busy ? '첫 스캔 중' : '스캔 못 함'; dot = scan.busy ? 'idle' : 'bad'; }
+  items.push({
+    type: 'title', label: `🐳 ${state.src.name} · 망호`, value, dot,
+    tip: scan.okAt && !scan.paused ? `다음 스캔 ${Math.max(0, Math.round((scan.nextAt - Date.now()) / 1000))}초 뒤` : scan.error || '',
+  });
   items.push({ type: 'item', id: 'scan', label: '지금 스캔' });
-  items.push({ type: 'item', id: 'open-list', label: '망호 탭 브라우저로 열기' });
-  items.push({ type: 'sep' });
+  items.push({ type: 'item', id: 'open-list', label: '갤러리 열기', tip: '망호 말머리 목록 · 브라우저' });
   if (appMode) items.push({ type: 'item', id: 'minimize', label: '창 최소화' });
-  items.push({ type: 'item', id: 'reset-pos', label: '위치 초기화', tip: '옮기려면 ☰를 끕니다' });
-  items.push({ type: 'segment', id: 'align', label: '정렬', options: [['left', '왼쪽'], ['right', '오른쪽']].map(([id, label]) => ({ id, label, on: cfg.align === id })) });
+  items.push({ type: 'sep' });
   items.push({
     type: 'segment', id: 'show', label: '표시', tip: '숨기면 트레이 아이콘으로 다시 표시합니다',
     options: [['always', '항상'], ['game', '게임 앞'], ['hidden', '숨김']].map(([id, label]) => ({ id, label, on: cfg.show === id })),
@@ -562,17 +538,21 @@ function menuItems() {
     tip: '겹칠 때: 같은 닉이 둘 이상이면 코드를 붙입니다',
     options: [['off', '끔'], ['nick', '닉'], ['code', '닉+코드'], ['dup', '겹칠 때']].map(([id, label]) => ({ id, label, on: cfg.nickMode === id })),
   });
-  items.push(...(toast ? toast.menuItems() : []));      // 알림 · 알림 위치 · 알림 등급 · 시험 알림
+  items.push(...(toast ? toast.menuItems() : []));      // 알림 [끔 | where]
   items.push({
     type: 'segment', id: 'font', label: '글자',
-    options: [['small', '작게'], ['mid', '중간'], ['large', '크게']].map(([id, label]) => ({ id, label, on: cfg.font === id })),
+    options: [['small', '작게', 'fs1'], ['mid', '중간', 'fs2'], ['large', '크게', 'fs3']].map(([id, label, cls]) => ({ id, label, face: '가', cls, on: cfg.font === id })),
   });
   items.push({
     type: 'segment', id: 'opacity', label: '투명도',
     options: [1, 0.9, 0.8, 0.7, 0.6].map((o) => ({ id: String(o), label: String(Math.round(o * 100)), on: Math.abs((cfg.opacity || 1) - o) < 0.01 })),
   });
   items.push({ type: 'sep' });
+  items.push(...(uui ? uui.menuItems() : []));
+  // rarely used: plain lines until the user settles how the bottom row looks
   items.push({ type: 'item', id: 'notice', label: '이용 안내 보기' });
+  items.push({ type: 'item', id: 'reset-pos', label: '위치 초기화', tip: '옮기려면 ☰를 끕니다' });
+  items.push(...(toast ? toast.moreItems() : []));      // 알림 등급 · 시험 알림
   items.push({ type: 'item', id: 'quit', label: '종료' });
   return items;
 }
@@ -586,7 +566,6 @@ function menuAct(id, opt) {
     case 'open-list': shell.openExternal(scanner.listUrl(state.src)); return false;
     case 'minimize': if (win) win.minimize(); return false;
     case 'reset-pos': saveCfg({ ...POS[cfg.align] }); place(); return false;
-    case 'align': setAlign(opt); return true;
     case 'show': setShow(opt); return opt !== 'hidden';
     case 'nickmode': if (NICK_MODES.includes(opt)) { saveCfg({ nickMode: opt }); toPage(windowState()); } return true;
     case 'font': if (FONT_SCALE[opt]) { saveCfg({ font: opt }); place(); } return false;   // the menu itself changes size
@@ -618,12 +597,6 @@ function openMenu(build, act) {
 
 function popupMenu() {
   openMenu(menuItems, menuAct);
-}
-
-function setAlign(a) {
-  saveCfg({ align: a, ...POS[a] });
-  toPage(windowState());
-  place();
 }
 
 function setShow(v) {
