@@ -8,10 +8,12 @@ Only when the user asks for one (workspace policy: it is a ~145 MB build).
 
 --release makes the GitHub release files the apps' updater reads (updater.js):
     mangho-scanner-<v>-full.zip   the whole build ("망호 스캐너/" folder) - first install, new Electron
+    mangho-scanner-full.zip       the same bytes under a fixed name, signed on its own - for links to
+                                  releases/latest/download/ (not in latest.json: updaters never see it)
     mangho-scanner-<v>-app.zip    resources\\app only (the code, KB) - what an update swaps in
     mangho-scanner-notice-<N>.html  the notice (이용 안내) of this version, N = its notice-version
     latest.json                   {schema, app, version, pub_date, notes (CHANGELOG), runtime, notice, assets}
-    *.minisig                     each of the four, signed by ../tools/release/sign.js
+    *.minisig                     each of the five, signed by ../tools/release/sign.js
 Publishing them (tag v<version>) is done separately (tools/release/publish.js).
 
 Steps: icon.ico from icon.png (Pillow) -> `node build_exe.js` (@electron/packager, a
@@ -217,15 +219,29 @@ def main(argv):
         "notice": {"version": nver, **asset(notice)},
         "assets": {"app": asset(appzip), "full": asset(full)},
     }
+    # the first-install zip again under a fixed name (user 2026-11-27): posts can link
+    # releases/latest/download/<app>-full.zip and always hand out the newest build. Same bytes,
+    # its own signature (the trusted comment names the file); never in latest.json - the updater
+    # checks assets.full.name == <app>-<v>-full.zip, so that one keeps its name
+    fixed = os.path.join(rel, "%s-full.zip" % APP_ID)
+    with open(full, "rb") as src, open(fixed, "wb") as dst:
+        while True:
+            chunk = src.read(1 << 20)
+            if not chunk:
+                break
+            dst.write(chunk)
+    if asset(fixed)["sha256"] != asset(full)["sha256"]:
+        print("고정 이름 사본이 원본과 다름 — 만들지 않음")
+        return 1
     latest = os.path.join(rel, "latest.json")
     with open(latest, "w", encoding="utf-8") as fh:
         json.dump(feed, fh, ensure_ascii=False, indent=1)
-    sign = subprocess.run(["node", os.path.join(WORKSPACE, "tools", "release", "sign.js"), appzip, full, notice, latest],
+    sign = subprocess.run(["node", os.path.join(WORKSPACE, "tools", "release", "sign.js"), appzip, full, fixed, notice, latest],
                           capture_output=True, text=True, encoding="utf-8")
     if sign.returncode != 0:
         print("서명 실패:\n" + sign.stderr[-1000:])
         return 1
-    ok, out = electron_selftest([appzip, full, notice, latest])
+    ok, out = electron_selftest([appzip, full, fixed, notice, latest])
     if not ok:
         print("Electron 안에서 서명 확인 실패 — 앱이 이 릴리스를 받을 수 없음, 게시하지 말 것:\n" + out)
         return 1
