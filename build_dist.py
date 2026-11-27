@@ -108,7 +108,7 @@ def build_app(build):
     shutil.rmtree(os.path.join(app, "resources", "app", "node_modules"), ignore_errors=True)
     for need in (NAME + ".exe", os.path.join("resources", "app", "gamewin.ps1"), os.path.join("resources", "app", "main.js"),
                  os.path.join("resources", "app", "updater.js"), os.path.join("resources", "app", "blake2b.js"),
-                 os.path.join("resources", "app", "apply-update.ps1")):
+                 os.path.join("resources", "app", "apply-update.ps1"), os.path.join("resources", "app", "toast-ui.js")):
         if not os.path.exists(os.path.join(app, need)):
             raise SystemExit("빌드 결과에 %s 없음: %s" % (need, app))
     return app

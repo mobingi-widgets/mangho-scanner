@@ -19,6 +19,7 @@ const dockLib = require('./dock');
 const ctxLib = require('./ctxmenu');
 const updater = require('./updater');
 const consent = require('./consent');
+const toastLib = require('./toast-ui');
 
 // The notice (이용 안내, notice.html - its <meta name="notice-version"> is the version): nothing
 // starts - no gallery reads, no window tracking, no update check - until it is agreed to.
@@ -40,7 +41,8 @@ function makeUpdateUi() {
     previousDir: () => path.join(process.resourcesPath, '.update', 'previous'),
     installOpts: () => ({ appDir: path.join(process.resourcesPath, 'app'), keep: [], launch: process.execPath, launchCwd: path.dirname(process.execPath) }),
     cfg: () => cfg, saveCfg, near: () => gameRectDip(),
-    page: (m) => toPage(m),
+    // results and "x.y.z로 업데이트됨" go to the toast window; with toasts off (or below the level) the pill
+    page: (m) => { if (m.type !== 'update-toast' || !notify({ text: m.text, level: m.level, sec: m.sec, by: '업데이트' })) toPage(m); },
     quit: () => app.quit(),
     zoom: () => zoom,                  // the update window reads at the overlay's text size
   });
@@ -56,7 +58,9 @@ const POS = { left: { dx: 8, fy: 0.24 }, right: { dx: 88, fy: 0.37 } };
 // width = the whole window: since 1.5.1 that includes the width bar's own 8px strip beside the
 // list (style.css), so the default and every saved width got 8 more - the list keeps its width
 const WIDTH_STRIP = 8;
-const DEFAULTS = { width: 250 + WIDTH_STRIP, align: 'right', ...POS.right, show: 'always', opacity: 1, expanded: true, nickMode: 'off', tab: 'normal', role: 'all', font: 'mid', v: 2 };
+const DEFAULTS = { width: 250 + WIDTH_STRIP, align: 'right', ...POS.right, show: 'always', opacity: 1, expanded: true, nickMode: 'off', tab: 'normal', role: 'all', font: 'mid', v: 2,
+  // toasts (1.6.0, as in 주간 납품): pos = top | center | bottom of the game window, min = the least level shown
+  toast: { on: true, pos: 'top', min: 'info' } };
 // 작성자 칸 (user 2026-11-27): off | nick | code = 닉(식별코드) | dup = code only for a nick seen twice
 const NICK_MODES = ['off', 'nick', 'code', 'dup'];
 // 글자 작게/중간/크게 (user 2026-11-27): times the zoom that follows the game window's size;
@@ -83,7 +87,7 @@ let cfg = DEFAULTS;
 function loadCfg() {
   let saved = {};
   try { saved = JSON.parse(fs.readFileSync(CFG_PATH(), 'utf8')); } catch { /* first run */ }
-  const c = { ...DEFAULTS, ...saved, v: DEFAULTS.v };
+  const c = { ...DEFAULTS, ...saved, toast: { ...DEFAULTS.toast, ...(saved.toast || {}) }, v: DEFAULTS.v };
   // 1.4.0 and before: 작성자 닉 on/off -> 겹칠 때 (the nick, a code when it repeats) / 끔
   if (!saved.nickMode && 'nick' in saved) c.nickMode = saved.nick ? 'dup' : 'off';
   if (!NICK_MODES.includes(c.nickMode)) c.nickMode = 'off';
@@ -160,13 +164,30 @@ function problems() {
 }
 
 let lastProblems = '';
+let knownProblems = new Set();
+// the same problem with a new count or time ("스캔 실패 3회 연속", "(5분 전이 마지막)") is not new
+const problemKey = (p) => p.split(' — ')[0].replace(/\s*\(.*$/, '').replace(/\d+/g, '#');
 function pushProblems() {
   const list = problems();
   const key = JSON.stringify(list);
   if (key !== lastProblems) {
     lastProblems = key;
     toPage({ type: 'problems', list });
+    // a problem that just appeared also gets a toast (the ⚠ on the ☰ stays until it is gone)
+    for (const p of list) if (!knownProblems.has(problemKey(p))) notify({ text: p, level: 'warn', by: '스캐너' });
+    knownProblems = new Set(list.map(problemKey));
   }
+}
+
+// ------------------------------------------------------------------- toasts
+// toast-ui.js (1.6.0, user 2026-11-27): the same source as 주간 납품's toasts, but its own window
+// and settings at run time - nothing shared with the other program while running. Update results,
+// "x.y.z로 업데이트됨" / rollback, and a problem that just appeared. Not the posts (not asked for).
+let toast = null;
+const gameVisible = () => !!game.found && !game.minimized;
+// -> shown or kept for later; false = toasts are off or below the chosen level
+function notify(m) {
+  return toast ? toast.notify(m) : false;
 }
 
 // ----------------------------------------------------------------- tooltips
@@ -343,6 +364,7 @@ function place() {
   updateVisibility();
   // where this overlay is, for the other overlays' docking (none while it is a plain window or hidden)
   if (dock) dock.publish(!appMode && win.isVisible() ? win.getBounds() : null);
+  if (toast) toast.place();             // follows the game window and the zoom; the backlog when it is back
 }
 
 function updateVisibility() {
@@ -483,8 +505,9 @@ function menuItems() {
     tip: '제목 옆 작성자 칸. 코드 = 회원 아이디 / 유동 IP 앞자리 · 겹칠 때 = 같은 닉이 둘 이상일 때만 코드',
     options: [['off', '끔'], ['nick', '닉'], ['code', '닉+코드'], ['dup', '겹칠 때']].map(([id, label]) => ({ id, label, on: cfg.nickMode === id })),
   });
+  items.push(...(toast ? toast.menuItems() : []));      // 알림 · 알림 위치 · 알림 등급 · 시험 알림
   items.push({
-    type: 'segment', id: 'font', label: '글자', tip: '오버레이·툴팁·메뉴·업데이트 창·이용 안내의 글자 크기 (게임 창 크기에 맞춘 배율 위에)',
+    type: 'segment', id: 'font', label: '글자', tip: '오버레이·툴팁·메뉴·알림·업데이트 창·이용 안내의 글자 크기 (게임 창 크기에 맞춘 배율 위에)',
     options: [['small', '작게'], ['mid', '중간'], ['large', '크게']].map(([id, label]) => ({ id, label, on: cfg.font === id })),
   });
   items.push({
@@ -500,6 +523,7 @@ function menuItems() {
 // -> keep the menu open (the line changed in place)?
 function menuAct(id, opt) {
   if (id.startsWith('upd-')) return uui ? uui.menuAct(id) : false;
+  if (id.startsWith('toast')) return toast ? toast.menuAct(id, opt) : false;
   switch (id) {
     case 'scan': runScan(); return false;
     case 'open-list': shell.openExternal(scanner.listUrl(state.src)); return false;
@@ -672,6 +696,11 @@ async function demoShots() {
   await wait(800);
   await save(ctx.window(), 'menu-role');
   ctx.close();
+  // the toast window: an update result and a problem that just appeared (made up)
+  notify({ text: '9.9.0으로 업데이트됨', level: 'info', sec: 30, by: '업데이트' });
+  notify({ text: '스캔 실패 2회 연속 — 갤러리 응답 없음', level: 'warn', sec: 30, by: '스캐너' });
+  await wait(1200);
+  await save(toast.window(), 'toast');
   await js("window.__pill('새로운 업데이트가 있습니다! (v9.9.0)')");
   await wait(400);
   await save(win, 'update-pill');
@@ -851,6 +880,11 @@ if (!app.requestSingleInstanceLock()) {
     createWindow();
     starting = false;                  // from here, closing the last window quits
     createTipWindow();
+    toast = toastLib.create({
+      dir: __dirname, title: '망호 스캐너 알림', source: '스캐너',
+      settings: () => cfg.toast, save: (p) => saveCfg({ toast: { ...cfg.toast, ...p } }),
+      gameRect: gameRectDip, gameVisible, zoom: () => zoom, always: !!SHOT || !!DEMO,
+    });
     dock = dockLib.create({
       win, name: SHOT ? 'mangho-scanner-shot' : DEMO ? 'mangho-scanner-demo' : 'mangho-scanner', title: '망호 스캐너',
       gameRect: gameRectDip, appMode: () => appMode,
@@ -864,7 +898,7 @@ if (!app.requestSingleInstanceLock()) {
     runScan();
     if (!SHOT) {
       uui.start();
-      setTimeout(() => uui.afterStart(), 3000);      // "x.y.z로 업데이트됨" / "되돌렸습니다" once the page is up
+      setTimeout(() => uui.afterStart(), 4000);      // "x.y.z로 업데이트됨" / "되돌렸습니다" once the toasts are up
       if (app.isPackaged) setTimeout(() => updater.cleanup(path.join(process.resourcesPath, '.update'), app.getVersion()), 90 * 1000);
     }
     setInterval(raise, 2000);
