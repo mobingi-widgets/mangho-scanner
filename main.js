@@ -354,21 +354,40 @@ function checkMode() {
 // The edge away from the anchored side (user 2026-11-27): docked right -> the left edge,
 // docked left -> the right edge; a plain window grows to the right.
 const widthSide = () => (appMode || cfg.align === 'left' ? 'right' : 'left');
-function widthDrag(on, min) {
+// edge 'anchored' (user 2026-11-27): the bar on the anchored side, over the game - that edge moves
+// with the cursor and the free one stays, so dx changes with the width; it stops at the game
+// window's snap line (then that edge is on it and its bar goes).
+const anchoredFree = () => !appMode && cfg.dx > dockLib.GAP + 0.5;
+function widthDrag(on, min, edge) {
   if (!dock) return;
   if (!on) { dock.widthEnd(); return; }
   const g = gameRectDip();
-  const max = g ? Math.floor((g.width * WIDTH_MAX_OF_GAME) / zoom) : 640;
+  let max = Math.max(DEFAULTS.width, g ? Math.floor((g.width * WIDTH_MAX_OF_GAME) / zoom) : 640);
   tipAnchor = null;
   placeTip();
+  const anchored = edge === 'anchored' && !!g && anchoredFree();
+  const b = win.getBounds();
+  const fixed = cfg.align === 'left' ? b.x + b.width : b.x;          // the free edge, kept
+  if (anchored) {
+    const room = cfg.align === 'left' ? fixed - (g.x + dockLib.GAP) : g.x + g.width - dockLib.GAP - fixed;
+    max = Math.min(max, Math.floor(room / zoom));
+  }
   dock.widthStart({
     base: cfg.width,                    // the width moves by the cursor's way from the press
-    side: widthSide(), zoom, min: Math.max(160, Math.ceil(min || 0)), max: Math.max(DEFAULTS.width, max),
+    side: anchored ? (cfg.align === 'left' ? 'left' : 'right') : widthSide(), zoom, min: Math.max(160, Math.ceil(min || 0)), max,
     onWidth: (w, done) => {
       cfg.width = w;                       // live; kept when let go
+      if (anchored) {
+        const dx = cfg.align === 'left' ? fixed - w * zoom - g.x : g.x + g.width - (fixed + w * zoom);
+        cfg.dx = Math.max(dockLib.GAP, Math.round(dx));
+      }
       place();
       toPage({ type: 'width', width: w, live: !done });
-      if (done) { saveCfg({ width: w }); sizing = false; }
+      if (done) {
+        saveCfg(anchored ? { width: w, dx: cfg.dx } : { width: w });
+        sizing = false;
+        if (anchored) toPage(windowState());           // on the snap line now: its bar goes
+      }
     },
   });
 }
@@ -474,7 +493,7 @@ function onDrop(r) {
 function windowState() {
   // the width bar sits on the edge away from the anchored side (in a plain window: the right)
   return { type: 'window', expanded: !!cfg.expanded, align: cfg.align, nickMode: cfg.nickMode, tab: cfg.tab, role: cfg.role,
-    wside: widthSide(), width: cfg.width, defWidth: DEFAULTS.width, valign: appMode ? 'top' : cfg.valign };
+    wside: widthSide(), width: cfg.width, defWidth: DEFAULTS.width, valign: appMode ? 'top' : cfg.valign, wboth: anchoredFree() };
 }
 
 // ------------------------------------------------------------ window tracker
@@ -926,7 +945,7 @@ ipcMain.on('ui', (_e, action, arg) => {
   } else if (action === 'width-drag') {
     // the side bar: arg = { on, min (CSS px the header needs) }
     sizing = !!(arg && arg.on);
-    widthDrag(!!(arg && arg.on), arg && arg.min);
+    widthDrag(!!(arg && arg.on), arg && arg.min, arg && arg.edge);
     showBars(hits ? hits.isNear() : false);
   } else if (action === 'width-reset') {
     saveCfg({ width: DEFAULTS.width });

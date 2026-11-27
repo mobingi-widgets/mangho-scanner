@@ -347,7 +347,7 @@ document.addEventListener('mousemove', (e) => {
 // moves do not reach a click-through window while the game, run as administrator, is in front)
 window.watchHitRects('.hit, #panel', (list) => window.mangho.ui('hits', list), '#panel');
 // where the size bars show (what is drawn + their strips; main.js decides from the cursor)
-window.watchHitRects('.head .pill, #updpill, #panel, #sizer, #wsizer', (list) => window.mangho.ui('near', list), { inert: true });
+window.watchHitRects('.head .pill, #updpill, #panel, #sizer, #wsizer, #wsizer2', (list) => window.mangho.ui('near', list), { inert: true });
 // the whole area (over the game): once near, the bars stay while the pointer is anywhere in it
 window.watchHitRects('#area', (list) => window.mangho.ui('keep', list), { inert: true });
 window.addEventListener('mouseout', (e) => { if (!e.relatedTarget) { setHover(false); tipFor(null); } });
@@ -567,6 +567,7 @@ let defWidth = 258;
 function setWidthTip(w, def) {
   if (def) defWidth = def;
   wsizer.tipModel = { lines: [`너비 ${w}px`, '끌기: 너비 바꾸기', `두 번 클릭: 기본 너비 (${defWidth}px)`] };
+  $('wsizer2').tipModel = wsizer.tipModel;
 }
 // the least width: the header at its most compact (one-letter chip, tabs without pictures) with
 // the widest counts a tab can show (10 posts a kind) - so a later scan cannot make it too narrow
@@ -584,27 +585,31 @@ function headNeeds() {
   cnts.forEach((c, i) => { c.textContent = was.cnts[i]; });
   return min;
 }
-wsizer.addEventListener('pointerdown', (e) => {
-  if (e.button !== 0 || blocked()) return;
-  e.preventDefault();
-  try { e.target.setPointerCapture(e.pointerId); } catch { /* not capturable */ }   // the .grab; events bubble here
-  tipFor(null);
-  document.body.classList.add('wsizing');
-  window.mangho.ui('width-drag', { on: true, min: headNeeds() });
-  const done = () => {
-    wsizer.removeEventListener('pointerup', done);
-    wsizer.removeEventListener('pointercancel', done);
-    document.body.classList.remove('wsizing');
-    window.mangho.ui('width-drag', { on: false });
-    blockUntil = wsizerBlock = Date.now() + 300;
-  };
-  wsizer.addEventListener('pointerup', done);
-  wsizer.addEventListener('pointercancel', done);
-});
 // double-click = the default width. Its own release just set the short click block (blockUntil =
-// wsizerBlock) - that one must not swallow it (until 1.6.1 / 1.4.3 the reset never happened)
+// wsizerBlock) - that one must not swallow it (until 1.6.1 / 1.4.3 the reset never happened).
+// Two bars (user 2026-11-27): #wsizer on the free side, #wsizer2 on the anchored side (over the
+// game, while that edge is not on the game window's edge - main.js moves that edge instead).
 let wsizerBlock = 0;
-wsizer.addEventListener('dblclick', () => { if (!blocked() || blockUntil === wsizerBlock) window.mangho.ui('width-reset'); });
+for (const [bar, edge, cls] of [[wsizer, 'free', 'wsizing'], [$('wsizer2'), 'anchored', 'wsizing2']]) {
+  bar.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || blocked()) return;
+    e.preventDefault();
+    try { e.target.setPointerCapture(e.pointerId); } catch { /* not capturable */ }   // the .grab; events bubble here
+    tipFor(null);
+    document.body.classList.add(cls);
+    window.mangho.ui('width-drag', { on: true, min: headNeeds(), edge });
+    const done = () => {
+      bar.removeEventListener('pointerup', done);
+      bar.removeEventListener('pointercancel', done);
+      document.body.classList.remove(cls);
+      window.mangho.ui('width-drag', { on: false });
+      blockUntil = wsizerBlock = Date.now() + 300;
+    };
+    bar.addEventListener('pointerup', done);
+    bar.addEventListener('pointercancel', done);
+  });
+  bar.addEventListener('dblclick', () => { if (!blocked() || blockUntil === wsizerBlock) window.mangho.ui('width-reset'); });
+}
 new ResizeObserver(() => {
   fitList();
   fitHead();
@@ -630,6 +635,7 @@ window.mangho.onFeed((d) => {
     document.body.classList.toggle('wbar-left', d.wside === 'left');
     document.body.classList.toggle('wbar-right', d.wside !== 'left');
     document.body.classList.toggle('up', d.valign === 'bottom');      // content at the area's bottom
+    document.body.classList.toggle('wboth', !!d.wboth);              // the anchored side's width bar too
     placeBubble();                       // the ☰ may have moved to the other end
     if (d.width) setWidthTip(d.width, d.defWidth);
     if (d.tab && d.tab !== tab) showTab(d.tab);
