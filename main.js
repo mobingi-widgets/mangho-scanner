@@ -123,6 +123,8 @@ let shotDone = false;
 // MANGHO_DEMO=<dir>: the README screenshots (docs/img) from docs/demo-posts.json - see demoShots().
 const DEMO = process.env.MANGHO_DEMO;
 if (DEMO) app.setPath('userData', path.join(require('os').tmpdir(), 'mangho-scanner-demo'));
+// a window Windows reports as covered stops drawing - the demo's pictures must not depend on what else is on screen
+if (DEMO) app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 else if (SHOT) app.setPath('userData', path.join(require('os').tmpdir(), 'mangho-scanner-shot'));
 // MANGHO_USER_DATA=<dir>: run with a settings folder of its own (tests next to an installed copy)
 else if (process.env.MANGHO_USER_DATA) app.setPath('userData', process.env.MANGHO_USER_DATA);
@@ -702,8 +704,35 @@ function createTray() {
 // neutral backdrop - no gallery reads, no game window, no real names (the repo is public).
 async function demoShots() {
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-  const save = async (w, name) => fs.writeFileSync(path.join(DEMO, `${name}.png`), (await w.webContents.capturePage()).toPNG());
+  // capturePage copies what was last drawn: wait for a drawn frame and a window that has stopped
+  // changing size (it follows the page's height a frame later) - 3 s at most. Once a picture came
+  // out 3 px short: no frame for a second, so the height never followed (2026-11-27).
+  const frame = (w) => w.webContents.executeJavaScript(
+    'new Promise((ok) => { requestAnimationFrame(() => requestAnimationFrame(() => ok(true))); setTimeout(() => ok(false), 1000); })').catch(() => false);
+  const settled = async (w) => {
+    for (const t0 = Date.now(); Date.now() - t0 < 3000;) {
+      const before = JSON.stringify(w.getBounds());
+      const drew = await frame(w);
+      await wait(100);
+      if (drew && JSON.stringify(w.getBounds()) === before) return true;
+    }
+    return false;
+  };
+  const save = async (w, name) => {
+    if (!await settled(w)) console.warn(`demo: ${name} - not drawn or still resizing after 3 s`);
+    fs.writeFileSync(path.join(DEMO, `${name}.png`), (await w.webContents.capturePage()).toPNG());
+  };
+  // the real pointer may rest where a menu opens: its hover and hint line are not part of the picture
+  const unhover = async (w) => {
+    await w.webContents.insertCSS('* { pointer-events: none !important; }');
+    w.webContents.sendInputEvent({ type: 'mouseMove', x: 1, y: 1 });
+    await w.webContents.executeJavaScript("hoverKey = null; document.getElementById('hint').textContent = '';").catch(() => {});
+  };
   const js = (code) => win.webContents.executeJavaScript(code);
+  // start once the page has loaded (its feed handler listens): a message sent before that is lost,
+  // and one overview came out '읽는 중…' (2026-11-27)
+  if (win.webContents.isLoading()) await new Promise((r) => win.webContents.once('did-finish-load', r));
+  const hasSnap = () => js("typeof snap !== 'undefined' && !!snap").catch(() => false);
   fs.mkdirSync(DEMO, { recursive: true });
   const fx = JSON.parse(fs.readFileSync(path.join(__dirname, 'docs', 'demo-posts.json'), 'utf8'));
   const now = Date.now();
@@ -724,6 +753,8 @@ async function demoShots() {
   demoWindow();
   toPage({ type: 'snapshot', ...scan.last });
   await wait(900);
+  for (let i = 0; i < 3 && !await hasSnap(); i++) { toPage({ type: 'snapshot', ...scan.last }); await wait(500); }
+  if (!await hasSnap()) console.warn('demo: the page never got the posts');
   await js("document.body.classList.add('bars')");      // the size bars, as with the pointer near
   // ① tabs ② 내 직군 ③ ☰ ④ a fresh line ⑤ 직군 다름 ⑥ 출항 ⑦ the height line ⑧ a password (🔒)
   await js(`window.__marks([['.tab[data-kind=normal]', 1, 'top'], ['#role', 2, 'top'], ['#menu', 3, 'top'],
@@ -770,12 +801,14 @@ async function demoShots() {
   Object.assign(uui.state(), { info: { available: false }, at: Date.now() - 12 * 60000, error: '' });
   popupMenu();
   await wait(1200);
+  await unhover(ctx.window());
   await save(ctx.window(), 'menu');
   ctx.close();
   await wait(300);
   win.webContents.send('feed', { type: 'menu', open: false });
   ipcMain.emit('ui', { sender: win.webContents }, 'role-menu');
   await wait(800);
+  await unhover(ctx.window());
   await save(ctx.window(), 'menu-role');
   ctx.close();
   // 지금 스캔: one toast, progress then the result (review shots, not in the README)
