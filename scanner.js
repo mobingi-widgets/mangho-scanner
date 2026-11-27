@@ -207,12 +207,27 @@ function refsIn(html, gallery) {
   return out;
 }
 
-// the same writer (an inherited password must not be someone else's): the account for a 고닉 / 반고닉, the
-// nickname and IP band for a 유동 (as the 차단·메모 list tells writers apart - authors-store keyOf)
-function sameWriter(a, b) {
-  if (a.uid || b.uid) return !!a.uid && a.uid === b.uid;
-  const ba = band(a.ip);
-  return !!ba && ba === band(b.ip) && a.nick === b.nick;
+// who wrote it, as one key (an inherited password must not be someone else's): the account for a 고닉 / 반고닉,
+// the IP band and nickname for a 유동 (as the 차단·메모 list tells writers apart - authors-store keyOf); null when
+// neither can be told
+function writerKey(p) {
+  if (p.uid) return `u:${p.uid}`;
+  const b = band(p.ip);
+  return b ? `g:${b}:${p.nick}` : null;
+}
+const sameWriter = (a, b) => { const k = writerKey(a); return !!k && k === writerKey(b); };
+
+// Shared between 펌 (user 2026-11-27, 1.11.0 - "최대 한도를 정하긴 해야": the notice keeps passwords in memory only):
+// an original's password, once a 펌 of it was read through while the original was in range, given to a later 펌
+// of the same writer that refers to it directly - also after the original left the 1 h range. A lookup by the
+// original's number, not a hop. Capped: SHARE_MS from the original's post time, SHARE_MAX originals (the least
+// recently used go), in memory only (scan state - gone when the program quits; never in a file or the log).
+const SHARE_MS = 3 * 60 * 60 * 1000;
+const SHARE_MAX = 20;
+function remember(origins, no, entry) {
+  origins.delete(no);                          // to the end: the most recently used
+  origins.set(no, entry);
+  while (origins.size > SHARE_MAX) origins.delete(origins.keys().next().value);
 }
 
 // From a post, through its refs (depth first, at most REF_HOPS away, each post once): the first password a
@@ -246,18 +261,33 @@ const preview = (body) => {
 };
 
 // Every tracked post: the password it shows - its own (author comment > body > title), else one inherited
-// through its refs (marked with the original's number) - and what the page needs about its refs:
-// { no: the original to open (the 펌's first), t: its time while tracked, unread: a ref not read through }.
-// Sticky while the post is tracked: an inherited password, and the refs once read through - they outlive the
-// original leaving the range. Its 출항 / 20분 never pass on: a 펌 is a run of its own.
-function resolveRefs(posts) {
+// through its refs (marked with the original's number) or shared from origins (see SHARE_MS) - and what the page
+// needs about its refs: { no: the original to open (the 펌's first), t: its time while tracked, unread: a ref
+// neither read through nor shared }. Sticky while the post is tracked: an inherited password, and the refs once
+// read through - they outlive the original leaving the range. Its 출항 / 20분 never pass on: a 펌 is a run of its own.
+// origins: the shared map (scan state); now: for its age cap.
+function resolveRefs(posts, origins = null, now = Date.now()) {
   const tracked = new Map(posts.map((p) => [p.no, p]));
+  if (origins) for (const [no, e] of origins) if (!(now - e.t <= SHARE_MS)) origins.delete(no);     // the age cap
   for (const p of posts) {
     const refs = p.refs || [];
     if (refs.length) {
       const w = walkRefs(p, tracked);
-      if (w.pw) p.inherit = { pw: w.pw, src: w.src.no, preview: preview(w.src.body) };
-      p.readRefs = [...new Set([...(p.readRefs || []), ...w.read])];
+      if (w.pw) {
+        p.inherit = { pw: w.pw, src: w.src.no, preview: preview(w.src.body) };
+        // read in range: kept for later 펌 of the same writer (only this way - never from anything else)
+        if (origins && w.src.t && now - w.src.t <= SHARE_MS) remember(origins, w.src.no, { pw: w.pw, key: writerKey(w.src), t: w.src.t });
+      }
+      const read = [...w.read];
+      const key = writerKey(p);
+      for (const no of refs) {
+        const e = origins && !read.includes(no) && !(p.readRefs || []).includes(no) ? origins.get(no) : null;
+        if (!e || !key || e.key !== key) continue;
+        read.push(no);                             // shared = read
+        remember(origins, no, e);
+        if (!w.pw && !p.inherit) p.inherit = { pw: e.pw, src: no, preview: null };
+      }
+      p.readRefs = [...new Set([...(p.readRefs || []), ...read])];
     }
     const own = p.ownPw;
     p.pw = own ? (own.none ? null : own) : p.inherit ? { ...p.inherit.pw, inherited: p.inherit.src } : null;
@@ -488,7 +518,8 @@ function liveUntil(title, t, kind) {
 // -------------------------------------------------------------------- one scan
 
 function createState(src) {
-  return { src: { ...DEFAULT_SOURCE, ...(src || {}) }, posts: new Map(), scans: 0 };
+  // origins: 펌 passwords shared by the original's number (SHARE_MS / SHARE_MAX) - memory only, like posts
+  return { src: { ...DEFAULT_SOURCE, ...(src || {}) }, posts: new Map(), scans: 0, origins: new Map() };
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -574,7 +605,7 @@ async function scan(state, { kinds = ['normal', 'sub'] } = {}) {
     post.ownPw = passwordFind({ title: p.title, body: post.body, comments: post.pwComments });
     out.push(post);
   }
-  resolveRefs(out);                // its pw: its own, else through a 펌 / link (no request of its own)
+  resolveRefs(out, state.origins);  // its pw: its own, else through a 펌 / link or shared (no request of its own)
   state.posts = new Map(out.map((p) => [p.no, p]));
   state.scans += 1;
   return {
@@ -588,7 +619,8 @@ async function scan(state, { kinds = ['normal', 'sub'] } = {}) {
 }
 
 module.exports = { DEFAULT_SOURCE, createState, scan, listUrl, viewUrl, parseList, writerOf, readComment, byAuthor, kindOf, SUB_RULES, rolesOf,
-  bodyText, passwordIn, passwordOf, passwordFind, endTimeOf, liveUntil, refsIn, linkRef, sameWriter, walkRefs, resolveRefs, REF_HOPS };
+  bodyText, passwordIn, passwordOf, passwordFind, endTimeOf, liveUntil, refsIn, linkRef, writerKey, sameWriter, walkRefs, resolveRefs, REF_HOPS,
+  SHARE_MS, SHARE_MAX };
 
 if (require.main === module) {
   const state = createState();
