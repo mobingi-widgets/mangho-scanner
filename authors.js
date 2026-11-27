@@ -1,9 +1,8 @@
-// The 차단·메모 관리 window (authors-ui.js): the writer list, or - with #confirm=<band> - only the
-// warning for hiding a 유동 IP band. Everything from the list goes in as text (textContent).
+// The 차단·메모 관리 window (authors-ui.js): the writer list in the designer's table, or - with
+// #confirm=<band> - only the warning for hiding a 유동 IP band. Everything from the list goes in as
+// text (textContent), never as markup.
 const $ = (id) => document.getElementById(id);
 const KIND = { fixed: '고닉', semi: '반고닉', guest: '유동', '': '계정' };
-const ICON = { fixed: 'author-icons/fixed.svg', semi: 'author-icons/semi.svg' };
-const warnText = (key) => `이 IP 대역(${key})의 유동 글을 모두 숨깁니다. 같은 통신사를 쓰는 다른 사람의 글도 함께 숨겨질 수 있습니다.`;
 const kid = (k) => `${k.kind}:${k.key}`;
 const keyOf = (e) => ({ kind: e.kind, key: e.key });
 
@@ -19,59 +18,66 @@ function el(tag, cls, text) {
   return e;
 }
 
+const confirmMode = location.hash.startsWith('#confirm=');
+
 // the window is as tall as what shows
 function report() {
-  const box = (confirmMode ? $('warn') : $('card')).getBoundingClientRect();
+  const box = (confirmMode ? $('warn') : $('manager')).getBoundingClientRect();
   window.authors.ui('height', Math.ceil(box.height + 14));
 }
 
 // ---------------------------------------------------------------- the warning
 let warnThen = null;
+function warnText(key) {
+  const p = $('warntext');
+  p.replaceChildren('이 IP 대역(', el('strong', null, key), ')의 유동 글을 모두 숨깁니다. 같은 통신사를 쓰는 다른 사람의 글도 함께 숨겨질 수 있습니다.');
+}
 function askWarn(key, then) {
   warnThen = then;
-  $('warntext').textContent = warnText(key);
-  $('warn').hidden = false;
-  $('warnyes').focus();
+  warnText(key);
+  $('warn').showModal();
+  $('warnno').focus();                  // the safe answer first
 }
 function warnDone(yes) {
   const then = warnThen;
   warnThen = null;
-  $('warn').hidden = true;
+  if ($('warn').open) $('warn').close();
   if (yes && then) then();
 }
 
-const confirmMode = location.hash.startsWith('#confirm=');
 if (confirmMode) {
   const key = decodeURIComponent(location.hash.slice('#confirm='.length));
   document.body.classList.add('alone');
-  $('warntext').textContent = warnText(key);
-  $('warn').hidden = false;
+  warnText(key);
+  $('warn').show();
+  $('warnno').focus();
   $('warnyes').onclick = () => window.authors.ui('confirm', true);
   $('warnno').onclick = () => window.authors.ui('confirm', false);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') window.authors.ui('confirm', false); });
 } else {
-  $('card').hidden = false;
+  $('manager').hidden = false;
   $('warnyes').onclick = () => warnDone(true);
   $('warnno').onclick = () => warnDone(false);
+  $('warn').addEventListener('cancel', () => { warnThen = null; });       // Esc on the modal
 }
 new ResizeObserver(report).observe(document.body);
 
 // ---------------------------------------------------------------- the list
 function say(text, bad) {
-  const s = $('say');
-  s.textContent = text || '';
-  s.classList.toggle('bad', !!bad);
+  $('say').textContent = text || '';
+  $('say').classList.toggle('bad', !!bad);
 }
 function set(e, patch) { window.authors.ui('set', { key: keyOf(e), patch }); }
 
 function memoCell(e) {
-  const cell = el('span', 'memo');
+  const td = el('td', 'memo-cell');
   if (editing === kid(e)) {
-    const inp = el('input');
+    const inp = el('input', 'memo');
     inp.type = 'text';
     inp.maxLength = memoMax;
     inp.value = e.memo || '';
     inp.placeholder = '예: 인게임 닉';
+    inp.setAttribute('aria-label', `${e.nick || e.key} 메모`);
     let done = false;
     const finish = (save) => {
       if (done) return;
@@ -85,68 +91,72 @@ function memoCell(e) {
       if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); finish(false); }
     });
     inp.addEventListener('blur', () => finish(true));
-    cell.appendChild(inp);
+    td.appendChild(inp);
     setTimeout(() => { inp.focus(); inp.select(); });
-    return cell;
+    return td;
   }
-  const t = el('span', e.memo ? 'text' : 'text none', e.memo || '메모 쓰기');
-  cell.appendChild(t);
-  cell.title = '눌러서 메모 쓰기 · 고치기';
-  cell.addEventListener('click', () => { editing = kid(e); draw(); });
-  return cell;
+  td.appendChild(el('span', e.memo ? 'memo-text' : 'memo-text none', e.memo || '—'));
+  td.title = e.memo ? `${e.memo} · 눌러서 고치기` : '눌러서 메모 쓰기';
+  td.addEventListener('click', () => { editing = kid(e); draw(); });
+  return td;
 }
 
 function row(e) {
-  const r = el('div', `row${e.hidden ? ' hidden' : ''}`);
-  const sel = el('label', 'sel');
-  const box = el('input');
+  const tr = el('tr');
+  const name = e.nick || e.key;
+  const c1 = el('td', 'center');
+  const box = el('input', 'select');
   box.type = 'checkbox';
   box.checked = selected.has(kid(e));
+  box.setAttribute('aria-label', `${name} 선택`);
   box.addEventListener('change', () => { if (box.checked) selected.add(kid(e)); else selected.delete(kid(e)); drawFoot(); });
-  sel.appendChild(box);
-  const who = el('span', 'who');
-  if (ICON[e.member]) {
-    const img = el('img', 'mi');
-    img.src = ICON[e.member];
-    img.alt = '';
-    who.appendChild(img);
-  }
-  const names = el('span', 'names');
-  names.appendChild(el('span', 'nick', e.nick || (e.kind === 'ip' ? '유동' : e.key)));
-  names.appendChild(el('span', 'key', `${KIND[e.member] || KIND['']} · ${e.key}`));
-  who.appendChild(names);
-  const hide = el('span', 'hide');
-  const sw = el('button', `sw${e.hidden ? ' on' : ''}`);
-  sw.type = 'button';
-  sw.title = e.hidden ? '안 보기 끄기' : '안 보기';
-  sw.addEventListener('click', () => {
-    if (!e.hidden && e.kind === 'ip') askWarn(e.key, () => set(e, { hidden: true }));
-    else set(e, { hidden: !e.hidden });
+  c1.appendChild(box);
+  const c2 = el('td', 'center');
+  if (e.member === 'fixed' || e.member === 'semi') {
+    const ic = el('span', `author-icon ${e.member}`);
+    ic.title = KIND[e.member];
+    c2.appendChild(ic);
+  } else c2.appendChild(el('span', 'faint', e.kind === 'ip' ? '' : '—'));
+  c2.title = KIND[e.member] || KIND[''];
+  const c3 = el('td', 'key', e.key);
+  c3.title = e.key;
+  const c4 = el('td', e.nick ? 'nick' : 'nick faint', e.nick || '—');
+  if (e.nick) c4.title = e.nick;
+  const c6 = el('td', 'center');
+  const sw = el('input', 'switch');
+  sw.type = 'checkbox';
+  sw.setAttribute('role', 'switch');
+  sw.setAttribute('aria-label', `${name} 안 보기`);
+  sw.checked = !!e.hidden;
+  sw.addEventListener('change', () => {
+    if (sw.checked && e.kind === 'ip') { sw.checked = false; askWarn(e.key, () => set(e, { hidden: true })); }
+    else set(e, { hidden: sw.checked });
   });
-  hide.appendChild(sw);
-  r.append(sel, who, memoCell(e), hide);
-  return r;
+  c6.appendChild(sw);
+  tr.append(c1, c2, c3, c4, memoCell(e), c6);
+  return tr;
 }
 
 function drawFoot() {
-  const n = selected.size;
-  $('unhide').disabled = !n;
-  $('del').disabled = !n;
-  $('all').checked = n > 0 && n === entries.length;
-  $('all').indeterminate = n > 0 && n < entries.length;
+  const sel = entries.filter((e) => selected.has(kid(e)));
+  const all = entries.length > 0 && sel.length === entries.length;
+  $('selall').textContent = all ? '선택 해제' : '전체 선택';
+  $('selall').disabled = entries.length === 0;
+  $('unhide').disabled = !sel.some((e) => e.hidden);
+  $('del').disabled = sel.length === 0;
+  for (const box of document.querySelectorAll('#rows .select')) box.closest('tr').classList.toggle('on', box.checked);
 }
 
 function draw() {
-  const list = $('list');
-  list.replaceChildren(...entries.map(row));
+  $('rows').replaceChildren(...entries.map(row));
   $('empty').hidden = entries.length > 0;
-  $('head').hidden = entries.length === 0;
   drawFoot();
 }
 
-$('all').addEventListener('change', () => {
+$('selall').addEventListener('click', () => {
+  const all = entries.length > 0 && entries.every((e) => selected.has(kid(e)));
   selected.clear();
-  if ($('all').checked) for (const e of entries) selected.add(kid(e));
+  if (!all) for (const e of entries) selected.add(kid(e));
   draw();
 });
 $('unhide').addEventListener('click', () => {
@@ -157,15 +167,14 @@ $('del').addEventListener('click', () => {
 });
 $('export').addEventListener('click', () => window.authors.ui('export'));
 $('import').addEventListener('click', () => window.authors.ui('import'));
-$('x').addEventListener('click', () => window.authors.ui('close'));
+$('close').addEventListener('click', () => window.authors.ui('close'));
 $('addform').addEventListener('submit', (ev) => {
   ev.preventDefault();
   window.authors.ui('add', { text: $('addtext').value });
 });
 document.addEventListener('keydown', (e) => {
-  if (e.key !== 'Escape' || confirmMode) return;
-  if (!$('warn').hidden) warnDone(false);
-  else window.authors.ui('close');
+  if (e.key !== 'Escape' || confirmMode || $('warn').open || editing) return;
+  window.authors.ui('close');
 });
 
 window.authors.on((d) => {

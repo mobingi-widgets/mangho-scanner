@@ -2,48 +2,67 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; img-src 'self'; script-src 'self'; form-action 'none'; base-uri 'none'">
 <title>차단·메모 관리</title>
 <link rel="stylesheet" href="authors.css">
 </head>
 <body>
-<!-- the list (authors-ui.js open) -->
-<div id="card" hidden>
-  <div class="top">
-    <h1>차단·메모 관리</h1>
-    <button id="x" class="x" title="닫기">×</button>
-  </div>
-  <form id="addform" class="add">
-    <input id="addtext" type="text" maxlength="64" placeholder="아이디 또는 IP 대역 (예: 223.38)" autocomplete="off" spellcheck="false">
+<!-- the list (authors-ui.js open); the designer's table (user 2026-11-27) -->
+<main id="manager" class="manager" aria-labelledby="manager-title" hidden>
+  <h1 id="manager-title">차단·메모 관리</h1>
+  <form id="addform" class="registration">
+    <input id="addtext" type="text" aria-label="아이디 또는 IP 대역" placeholder="아이디 또는 IP 대역" maxlength="64" autocomplete="off" spellcheck="false">
     <button id="add" class="primary" type="submit">안 보기 등록</button>
   </form>
-  <div id="head" class="row head">
-    <label class="sel"><input id="all" type="checkbox" title="전체 선택"></label>
-    <span class="who">작성자</span>
-    <span class="memo">메모</span>
-    <span class="hide">안 보기</span>
+  <div class="list" role="region" aria-label="차단·메모 목록">
+    <table>
+      <colgroup>
+        <col class="select-column">
+        <col class="type-column">
+        <col class="key-column">
+        <col class="nick-column">
+        <col>
+        <col class="switch-column">
+      </colgroup>
+      <thead>
+        <tr>
+          <th scope="col" class="center">선택</th>
+          <th scope="col" class="center">유형</th>
+          <th scope="col">아이디/IP 대역</th>
+          <th scope="col" title="등록 때 닉">닉</th>
+          <th scope="col">메모</th>
+          <th scope="col" class="center">안 보기</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+      <tbody id="empty" hidden>
+        <tr><td class="empty" colspan="6">등록한 작성자가 없습니다. 목록에서 작성자를 우클릭해도 됩니다.</td></tr>
+      </tbody>
+    </table>
   </div>
-  <div id="list" class="list"></div>
-  <p id="empty" class="empty" hidden>등록한 작성자가 없습니다. 목록의 작성자를 우클릭하거나 위에 아이디·IP 대역을 넣어 등록합니다.</p>
   <p id="say" class="say"></p>
-  <div class="foot">
-    <button id="unhide" class="ghost" disabled>안 보기 해제</button>
-    <button id="del" class="ghost" disabled>삭제</button>
-    <span class="grow"></span>
-    <button id="export" class="ghost">내보내기</button>
-    <button id="import" class="ghost">불러오기</button>
-  </div>
-</div>
-<!-- the 유동 band warning: in the list's own card (#warn) or as a window of its own (#confirm=...) -->
-<div id="warn" class="warn" hidden>
-  <h2>유동 IP 대역 숨기기</h2>
+  <footer class="toolbar">
+    <div class="actions" role="group" aria-label="목록 작업">
+      <button id="selall" class="ghost" type="button">전체 선택</button>
+      <button id="unhide" class="ghost" type="button" disabled>안 보기 해제</button>
+      <button id="del" class="ghost danger" type="button" disabled>삭제</button>
+    </div>
+    <div class="actions" role="group" aria-label="파일 작업">
+      <button id="export" class="ghost" type="button">내보내기</button>
+      <button id="import" class="ghost" type="button">불러오기</button>
+    </div>
+    <button id="close" class="ghost close" type="button">닫기</button>
+  </footer>
+</main>
+<!-- the 유동 band warning: a modal over the list, or alone (#confirm=<band>, the overlay's menu) -->
+<dialog id="warn" class="warning" aria-labelledby="warn-title" aria-describedby="warntext">
+  <h2 id="warn-title">IP 대역 숨기기</h2>
   <p id="warntext"></p>
-  <div class="foot">
-    <span class="grow"></span>
-    <button id="warnno" class="ghost">취소</button>
-    <button id="warnyes" class="primary danger">숨기기</button>
+  <div class="confirmation">
+    <button id="warnyes" class="primary" type="button">숨기기</button>
+    <button id="warnno" class="ghost" type="button">취소</button>
   </div>
-</div>
+</dialog>
 <script src="authors.js"></script>
 </body>
 </html>

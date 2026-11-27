@@ -11,7 +11,7 @@ const { BrowserWindow, ipcMain, dialog, screen } = require('electron');
 const path = require('path');
 const { parseInput, MEMO_MAX } = require('./authors-store');
 
-const W = 480;              // CSS px; times the zoom
+const W = 460;              // CSS px (the card 448 + its margin); times the zoom
 const CONFIRM_W = 360;
 
 // create({ dir, store, title, zoom: () => number, near: () => DIP rect | null (the overlay), test? })
