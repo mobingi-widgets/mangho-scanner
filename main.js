@@ -701,9 +701,11 @@ async function demoShots() {
   notify({ text: '스캔 실패 2회 연속 — 갤러리 응답 없음', level: 'warn', sec: 30, by: '스캐너' });
   await wait(1200);
   await save(toast.window(), 'toast');
-  await js("window.__pill('새로운 업데이트가 있습니다!')");
+  // a newer release, as the update check reports it: the bubble and the dot on the ☰
+  toPage({ type: 'update', version: '9.9.0', pill: true });
   await wait(400);
   await save(win, 'update-pill');
+  toPage({ type: 'update', version: '', pill: false });
   await uui.demo(path.join(DEMO, 'update'));
   for (const f of fs.readdirSync(DEMO)) {             // keep the steps the README shows
     if (f.startsWith('update-') && !['update-available.png', 'update-downloading.png', 'update-pill.png'].includes(f)) fs.rmSync(path.join(DEMO, f));
