@@ -1,6 +1,6 @@
 {
   "name": "mangho-scanner",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "private": true,
   "description": "망호 스캐너 — 에반(마비노기 모바일) 갤러리 망호 말머리 오버레이 (읽기 전용)",
   "main": "main.js",
