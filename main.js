@@ -68,7 +68,7 @@ const WIDTH_STRIP = 8;
 // the content-sized window had; fyb = its bottom edge once the content sits at the bottom
 // width 300 (1.8.0, user 2026-11-27): a new install shows 작성자 = 닉(코드), and at 258 the titles were cut
 // short; a saved width stays as it is. Double-click on the width bar = this width.
-const DEFAULTS = { width: 292 + WIDTH_STRIP, align: 'right', ...POS.right, valign: 'top', fyb: 0.9, show: 'always', opacity: 1, expanded: true, nickMode: 'code', tab: 'normal', role: 'all', scale: 100, text: 100, subs: 'tab', newAlert: false, newSound: false, lockShrink: false, v: 3,
+const DEFAULTS = { width: 292 + WIDTH_STRIP, align: 'right', ...POS.right, valign: 'top', fyb: 0.9, show: 'always', opacity: 1, expanded: true, nickMode: 'code', tab: 'normal', role: 'all', scale: 100, text: 100, subs: 'tab', newAlert: false, newSoundVol: 0, lockShrink: false, v: 3,
   // toasts (1.6.0, as in 주간 납품): pos = top | center | bottom of the game window, min = the least level shown
   toast: { on: true, pos: 'top', min: 'info' } };
 // 작성자 칸 (user 2026-11-27): off | nick | code = 닉(코드) - the id of a 반고닉, the IP prefix of a 유동
@@ -84,6 +84,8 @@ const SUB_MODES = ['show', 'tab', 'hide'];
 // Until 1.8.x one setting, 글자 작게/중간/크게 = 배율 85/100/120 % - it becomes 배율 90/100/120 (loadCfg).
 const SCALE = { min: 70, max: 150, step: 10 };
 const TEXT = { min: 80, max: 150, step: 10 };
+// 새 망호 소리 음량 % (user 2026-11-27, 1.11.1): 0 = 음소거 (no sound at all), gain = % / 100
+const SOUND_VOL = { min: 0, max: 100, step: 10 };
 const FONT_TO_SCALE = { small: 90, mid: 100, large: 120 };
 // -> v on the range's steps, within it; nothing usable (missing, empty, not a number) = def
 const stepped = (v, r, def) => {
@@ -134,7 +136,11 @@ function loadCfg() {
   // 잠금 때 [그대로 | 작게 | 매우 작게]: false | true | 'tile' (true kept its 1.10.0 meaning); off unless turned on
   c.lockShrink = c.lockShrink === true || c.lockShrink === 'tile' ? c.lockShrink : false;
   c.newAlert = c.newAlert === true;                 // 새 망호 알림: off unless turned on
-  c.newSound = c.newSound === true;                 // 새 망호 소리: off unless turned on
+  // 새 망호 소리 음량 (1.11.1): 1.11.0's 켬 was the fixed 0.7 -> 70 (sounds the same), 끔 / none -> 0 (음소거,
+  // the default); the old key goes - the file is written once in the new form
+  if (saved.newSoundVol == null && 'newSound' in saved) { c.newSoundVol = saved.newSound === true ? 70 : 0; cfgOlder = true; }
+  c.newSoundVol = stepped(c.newSoundVol, SOUND_VOL, 0);
+  delete c.newSound;
   delete c.font;
   if (!SUB_MODES.includes(c.subs)) c.subs = 'tab';
   if (c.subs !== 'tab' && c.tab === 'sub') c.tab = 'normal';     // that tab is not there
@@ -312,11 +318,11 @@ function newPostToast(kind, list) {
 // user asked for these, so no 알림 등급 setting filters them out (they still expire, 8 s). While the game is
 // not on screen they go without an id, in one line: the toast window keeps them for its summary line when the
 // game is back (a toast with an id is never kept) - and one line is what that summary can quote.
-// 새 망호 소리 [끔 | 켬] (user 2026-11-27, 1.11.0; off for everyone until turned on): one short sound
-// (sounds/new-mangho.ogg, the page plays it) when a 새 망호 toast first appears - not when a toast still up
-// changes in place (one of its kind shown within NEW_TOAST_MS), not for what waited while the game was off
-// screen (that comes back as one summary - stale by then), at most once a NEW_SOUND_GAP_MS, once for both kinds.
-// Only with 새 망호 알림 on and toasts shown (notify says whether it was).
+// 새 망호 소리 (user 2026-11-27, 1.11.0; 음량 % since 1.11.1 - 0 = 음소거, the default): one short sound
+// (sounds/new-mangho.ogg, the page plays it at cfg.newSoundVol / 100) when a 새 망호 toast first appears - not
+// when a toast still up changes in place (one of its kind shown within NEW_TOAST_MS), not for what waited while
+// the game was off screen (that comes back as one summary - stale by then), at most once a NEW_SOUND_GAP_MS, once
+// for both kinds. Only with 새 망호 알림 on and toasts shown (notify says whether it was).
 const NEW_TOAST_MS = 8 * 1000;               // newPostToast's sec
 const NEW_SOUND_GAP_MS = 60 * 1000;
 const newShownUntil = { normal: 0, sub: 0 };
@@ -338,10 +344,21 @@ function alertNew(snap, seen, subsWereHidden) {
       newShownUntil[kind] = now + NEW_TOAST_MS;
     }
   }
-  if (fresh && cfg.newSound && now - newSoundAt >= NEW_SOUND_GAP_MS) {
+  if (fresh && cfg.newSoundVol > 0 && now - newSoundAt >= NEW_SOUND_GAP_MS) {
     newSoundAt = now;
-    toPage({ type: 'sound', name: 'new-mangho', gain: 0.7 });
+    toPage({ type: 'sound', name: 'new-mangho', gain: cfg.newSoundVol / 100 });
   }
+}
+// the ☰ / tray value changed: once at the new level, PREVIEW_MS after the last change (quick clicks = one play),
+// stopping one still playing; 음소거 stops it. Not a 새 망호: the 60 s gap is neither checked nor started.
+const PREVIEW_MS = 350;
+let previewT = null;
+function previewSound() {
+  clearTimeout(previewT);
+  if (!(cfg.newSoundVol > 0)) { toPage({ type: 'sound', name: 'new-mangho', stop: true }); return; }
+  previewT = setTimeout(() => {
+    if (cfg.newSoundVol > 0) toPage({ type: 'sound', name: 'new-mangho', gain: cfg.newSoundVol / 100, preview: true });
+  }, PREVIEW_MS);
 }
 
 // -> { text ('' = nothing to copy), say }
@@ -837,10 +854,8 @@ function menuItems() {
     type: 'segment', id: 'newalert', label: '새 망호 알림', tip: '자동 스캔이 새로 찾은 모집 중인 글을 알림으로 띄웁니다',
     options: [['off', '끔'], ['on', '켬']].map(([id, label]) => ({ id, label, on: cfg.newAlert === (id === 'on') })),
   });
-  items.push({
-    type: 'segment', id: 'newsound', label: '새 망호 소리', tip: '새 망호 알림이 뜰 때 짧은 소리 · 1분에 한 번까지',
-    options: [['off', '끔'], ['on', '켬']].map(([id, label]) => ({ id, label, on: cfg.newSound === (id === 'on') })),
-  });
+  items.push({ type: 'stepper', id: 'newsound', label: '새 망호 소리', value: cfg.newSoundVol, unit: '%', ...SOUND_VOL, names: { 0: '음소거' },
+    tip: '새 망호 알림이 뜰 때 소리 · 바꾸면 한 번 들려줌 · 1분에 한 번까지' });
   items.push({ type: 'stepper', id: 'scale', label: '배율', value: cfg.scale, unit: '%', ...SCALE, tip: '목록·메뉴·말풍선 전체 크기' });
   items.push({ type: 'stepper', id: 'text', label: '글자', value: cfg.text, unit: '%', ...TEXT, tip: '목록·툴팁의 글자만' });
   items.push({
@@ -889,7 +904,7 @@ function menuAct(id, opt) {
     case 'show': setShow(opt); return opt !== 'hidden';
     case 'subs': setSubs(opt); return true;
     case 'newalert': saveCfg({ newAlert: opt === 'on' }); return true;
-    case 'newsound': saveCfg({ newSound: opt === 'on' }); return true;
+    case 'newsound': saveCfg({ newSoundVol: stepped(opt, SOUND_VOL, cfg.newSoundVol) }); previewSound(); return true;
     case 'nickmode': if (NICK_MODES.includes(opt)) { saveCfg({ nickMode: opt }); toPage(windowState()); } return true;
     // (the open menu keeps its size until it closes; the value changes in place)
     case 'scale': saveCfg({ scale: stepped(opt, SCALE, cfg.scale) }); place(); return true;

@@ -817,14 +817,18 @@ new ResizeObserver(() => {
 
 setInterval(tick, 1000);
 
-// 새 망호 소리 (1.11.0): main.js decides when (alertNew) and how loud; sounds/new-mangho.ogg (CC0 - sounds/LICENSE.txt).
-// One element, restarted for each play. window.__sound: the last try, for the tests.
+// 새 망호 소리 (1.11.0): main.js decides when (alertNew, the menu's preview) and how loud (d.gain = 음량 % / 100,
+// 1.11.1); sounds/new-mangho.ogg (CC0 - sounds/LICENSE.txt). One element: a new play restarts it (a preview cuts
+// the one before), d.stop stops it. window.__sound: the last try, for the tests.
 let sfx = null;
 window.__sound = null;
 function playSound(d) {
   if (d.name !== 'new-mangho') return;
+  if (d.stop) { if (sfx) sfx.pause(); window.__sound = { at: Date.now(), result: 'stopped' }; return; }
+  const gain = Number(d.gain);
+  if (!(gain > 0)) return;                       // 음소거: nothing
   if (!sfx) sfx = new Audio('sounds/new-mangho.ogg');
-  sfx.volume = Math.max(0, Math.min(1, Number(d.gain) || 0.7));
+  sfx.volume = Math.min(1, gain);
   sfx.currentTime = 0;
   const at = Date.now();
   window.__sound = { at, result: 'pending' };
