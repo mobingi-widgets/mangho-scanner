@@ -126,7 +126,7 @@ function row(e) {
   const sw = el('input', 'switch');
   sw.type = 'checkbox';
   sw.setAttribute('role', 'switch');
-  sw.setAttribute('aria-label', `${name} 안 보기`);
+  sw.setAttribute('aria-label', `${name} 차단`);
   sw.checked = !!e.hidden;
   sw.addEventListener('change', () => {
     if (sw.checked && e.kind === 'ip') { sw.checked = false; askWarn(e.key, () => set(e, { hidden: true })); }
@@ -188,7 +188,7 @@ window.authors.on((d) => {
     askWarn(d.key.key, () => window.authors.ui('add', { text: $('addtext').value, confirmed: true }));
   } else if (d.type === 'added') {
     $('addtext').value = '';
-    say(`${d.key.key} — 안 보기로 등록했습니다`);
+    say(`${d.key.key} — 차단했습니다`);
   } else if (d.type === 'say') {
     say(d.text, d.bad);
   }

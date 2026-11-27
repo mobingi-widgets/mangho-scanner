@@ -12,7 +12,7 @@
   <h1 id="manager-title">차단·메모 관리</h1>
   <form id="addform" class="registration">
     <input id="addtext" type="text" aria-label="아이디 또는 IP 대역" placeholder="아이디 또는 IP 대역" maxlength="64" autocomplete="off" spellcheck="false">
-    <button id="add" class="primary" type="submit">안 보기 등록</button>
+    <button id="add" class="primary" type="submit">차단</button>
   </form>
   <div class="list" role="region" aria-label="차단·메모 목록">
     <table>
@@ -31,7 +31,7 @@
           <th scope="col">아이디/IP 대역</th>
           <th scope="col" title="등록 때 닉">닉</th>
           <th scope="col">메모</th>
-          <th scope="col" class="center">안 보기</th>
+          <th scope="col" class="center">차단</th>
         </tr>
       </thead>
       <tbody id="rows"></tbody>
@@ -44,7 +44,7 @@
   <footer class="toolbar">
     <div class="actions" role="group" aria-label="목록 작업">
       <button id="selall" class="ghost" type="button">전체 선택</button>
-      <button id="unhide" class="ghost" type="button" disabled>안 보기 해제</button>
+      <button id="unhide" class="ghost" type="button" disabled>차단 해제</button>
       <button id="del" class="ghost danger" type="button" disabled>삭제</button>
     </div>
     <div class="actions" role="group" aria-label="파일 작업">
