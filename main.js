@@ -513,6 +513,11 @@ function raise() {
   if (ctx && ctx.isOpen()) return;       // the menu (and its click catcher) stay on top while it is up
   win.setAlwaysOnTop(true, 'screen-saver');
   win.moveTop();
+  // the 차단·메모 list and the band card stay above the overlay (user report 2026-11-27: covered within
+  // 2 s); with either up, the tooltip and a toast go back above them
+  if (authorsUi && authorsUi.keepTop()) {
+    for (const w of [tipWin, toast && toast.window()]) if (w && !w.isDestroyed() && w.isVisible()) w.moveTop();
+  }
 }
 
 function place() {

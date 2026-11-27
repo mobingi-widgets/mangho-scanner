@@ -13,6 +13,28 @@ const { parseInput, MEMO_MAX } = require('./authors-store');
 
 const W = 460;              // CSS px (the card 448 + its margin); times the zoom
 const CONFIRM_W = 360;
+const GAP = 8;              // DIP: from the overlay, and from the work area's edges
+
+// Where a window of width x height goes (DIP): beside the overlay (near), not on it - on the side
+// with more room (left of it when it is docked right, right of it when docked left), its top at the
+// overlay's; inside the work area a. No overlay: the middle of the work area, a third down.
+// (User report 2026-11-27: centred on the overlay, it was covered by it.)
+function besideRect(near, a, width, height) {
+  let x;
+  let y;
+  if (near) {
+    const roomLeft = near.x - a.x;
+    const roomRight = a.x + a.width - (near.x + near.width);
+    x = roomLeft >= roomRight ? near.x - GAP - width : near.x + near.width + GAP;
+    y = near.y;
+  } else {
+    x = a.x + (a.width - width) / 2;
+    y = a.y + (a.height - height) / 3;
+  }
+  x = Math.max(a.x + GAP, Math.min(x, a.x + a.width - width - GAP));
+  y = Math.max(a.y + GAP, Math.min(y, a.y + a.height - height - GAP));
+  return { x: Math.round(x), y: Math.round(y), width, height };
+}
 
 // create({ dir, store, title, zoom: () => number, near: () => DIP rect | null (the overlay), test? })
 // test = { offscreen windows, no dialogs: exportFile / importFile given } - for the tests only
@@ -26,18 +48,38 @@ function create(o) {
   const send = (w, obj) => { if (alive(w)) w.webContents.send('authors', obj); };
   const list = () => ({ type: 'list', entries: o.store.all(), memoMax: MEMO_MAX });
 
-  // beside the overlay (else the middle of its screen), inside the work area
+  // the first time: beside the overlay (besideRect). After that only its height follows the page:
+  // the user may have moved it by its title line, so it stays there (kept inside the work area).
+  const placed = new WeakSet();
   function placeAt(w, cssW, cssH) {
     if (!alive(w)) return;
     const z = zoom();
-    const near = o.near && o.near();
-    const pt = near ? { x: Math.round(near.x + near.width / 2), y: Math.round(near.y + 40) } : screen.getCursorScreenPoint();
-    const a = screen.getDisplayNearestPoint(pt).workArea;
     const width = Math.round(cssW * z);
-    const h = Math.min(Math.round(cssH * z), a.height - 16);
-    const x = Math.round(Math.max(a.x + 8, Math.min(pt.x - width / 2, a.x + a.width - width - 8)));
-    const y = Math.round(Math.max(a.y + 8, Math.min(pt.y, a.y + a.height - h - 8)));
-    w.setBounds({ x, y, width, height: h });
+    if (placed.has(w)) {
+      const b = w.getBounds();
+      const a = screen.getDisplayMatching(b).workArea;
+      const h = Math.min(Math.round(cssH * z), a.height - 2 * GAP);
+      w.setBounds({ x: b.x, y: Math.max(a.y + GAP, Math.min(b.y, a.y + a.height - h - GAP)), width, height: h });
+      return;
+    }
+    const near = o.near && o.near();
+    const a = (near ? screen.getDisplayMatching(near) : screen.getDisplayNearestPoint(screen.getCursorScreenPoint())).workArea;
+    w.setBounds(besideRect(near, a, width, Math.min(Math.round(cssH * z), a.height - 2 * GAP)));
+    placed.add(w);
+  }
+
+  // The overlay raises itself every 2 s (main.js raise); it calls this right after, so the list
+  // and the band card stay above it (the card above the list: it is a question waiting for an
+  // answer). -> whether either is up (then what only flashes by - tooltip, toast - goes above).
+  function keepTop() {
+    let up = false;
+    for (const w of [win, card && card.win]) {
+      if (!alive(w) || !w.isVisible()) continue;
+      w.setAlwaysOnTop(true, 'screen-saver');
+      w.moveTop();
+      up = true;
+    }
+    return up;
   }
 
   function makeWindow(cssW, hash, label) {
@@ -149,7 +191,7 @@ function create(o) {
     }
   });
 
-  return { open, confirmBand, window: () => win, card: () => (card ? card.win : null) };
+  return { open, confirmBand, keepTop, window: () => win, card: () => (card ? card.win : null) };
 }
 
-module.exports = { create };
+module.exports = { create, besideRect };

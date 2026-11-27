@@ -12,6 +12,13 @@ body { color: #e7e3da; font: 400 13px/1.5 "Malgun Gothic", "Segoe UI", system-ui
 }
 .manager { position: relative; width: min(448px, calc(100% - 12px)); margin: 6px auto; }
 h1, h2 { margin: 0 0 10px; color: #fff; font-size: 16px; }
+/* the title line moves the window (it has no frame): a drag handle, its grip at the right end
+   (user report 2026-11-27). The band card's title too, when it is a window of its own. */
+h1, body.alone h2 { display: flex; align-items: center; -webkit-app-region: drag; }
+h1::after, body.alone h2::after {
+  content: ''; flex: none; width: 15px; height: 10px; margin-left: auto;
+  background: radial-gradient(circle, rgba(255,255,255,.32) 1.2px, transparent 1.7px) 0 0 / 5px 5px;
+}
 
 button { padding: 6px 14px; border: 1px solid rgba(255,255,255,.18); border-radius: 8px; font: inherit; white-space: nowrap; cursor: pointer; }
 button.ghost { background: #262b35; color: #e7e3da; }
