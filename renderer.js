@@ -430,18 +430,35 @@ function setProblems(list) {
 }
 window.setProblems = setProblems;
 
-// "새로운 업데이트가 있습니다!" under the tabs (click: the update window); a short message from
-// the update check takes its place for a few seconds
+// "새로운 업데이트가 있습니다!" - a bubble under the ☰ that takes no room (click: the update
+// window); hidden while the menu is open. With toasts off, a short message from the update
+// check takes its place for a few seconds.
 let updPill = '';
 let updToast = null;
 let updToastT = 0;
+let menuOpen = false;
 function drawPill() {
   const p = $('updpill');
   const text = updToast ? updToast.text : updPill;
-  p.hidden = !text;
+  p.hidden = !text || menuOpen;
   p.textContent = text;
   p.className = `updpill hit ${updToast ? `toast ${updToast.level}` : ''}`;
+  placeBubble();
 }
+// under the ☰, its edge on the ☰'s edge toward the list, kept inside the window; the caret at the ☰
+function placeBubble() {
+  const b = $('updpill');
+  if (b.hidden) return;
+  const m = $('menu').getBoundingClientRect();
+  const r = $('root').getBoundingClientRect();
+  const w = b.offsetWidth;
+  let left = document.body.classList.contains('left') ? m.left - r.left : m.right - r.left - w;
+  left = Math.max(2, Math.min(left, r.width - w - 2));
+  b.style.top = `${Math.round(m.bottom - r.top + 4)}px`;
+  b.style.left = `${Math.round(left)}px`;
+  b.style.setProperty('--caret', `${Math.round(Math.max(4, Math.min(w - 12, left + w - (m.left - r.left + m.width / 2) - 4)))}px`);
+}
+new ResizeObserver(placeBubble).observe(document.querySelector('.head'));
 $('updpill').addEventListener('click', () => {
   if (blocked()) return;
   if (updToast) { updToast = null; drawPill(); return; }     // a message: click = dismiss
@@ -557,6 +574,7 @@ wsizer.addEventListener('pointerdown', (e) => {
 wsizer.addEventListener('dblclick', () => { if (!blocked()) window.mangho.ui('width-reset'); });
 new ResizeObserver(() => {
   fitList();
+  placeBubble();
   window.mangho.ui('height', $('root').getBoundingClientRect().height + 2);
 }).observe($('root'));
 
@@ -577,6 +595,7 @@ window.mangho.onFeed((d) => {
     if (mode !== nickMode) { nickMode = mode; if (snap) draw(); }
     document.body.classList.toggle('wbar-left', d.wside === 'left');
     document.body.classList.toggle('wbar-right', d.wside !== 'left');
+    placeBubble();                       // the ☰ may have moved to the other end
     if (d.width) setWidthTip(d.width, d.defWidth);
     if (d.tab && d.tab !== tab) showTab(d.tab);
     if (d.role && d.role !== role) setRole(d.role);
@@ -610,7 +629,7 @@ window.mangho.onFeed((d) => {
     // update window it opens (never by itself)
     $('menu').classList.toggle('upd', !!d.version);
     $('menu').dataset.upd = d.version || '';
-    updPill = d.pill ? `새로운 업데이트가 있습니다! (v${d.version})` : '';
+    updPill = d.pill ? '새로운 업데이트가 있습니다!' : '';
     drawPill();
     setProblems(problems);
   } else if (d.type === 'update-toast') {
@@ -621,5 +640,7 @@ window.mangho.onFeed((d) => {
     updToastT = setTimeout(() => { updToast = null; drawPill(); }, (d.sec || 3) * 1000);
   } else if (d.type === 'menu') {
     blockUntil = d.open ? Infinity : Date.now() + 300;
+    menuOpen = !!d.open;
+    drawPill();
   }
 });

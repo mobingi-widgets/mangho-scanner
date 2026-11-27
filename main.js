@@ -701,7 +701,7 @@ async function demoShots() {
   notify({ text: '스캔 실패 2회 연속 — 갤러리 응답 없음', level: 'warn', sec: 30, by: '스캐너' });
   await wait(1200);
   await save(toast.window(), 'toast');
-  await js("window.__pill('새로운 업데이트가 있습니다! (v9.9.0)')");
+  await js("window.__pill('새로운 업데이트가 있습니다!')");
   await wait(400);
   await save(win, 'update-pill');
   await uui.demo(path.join(DEMO, 'update'));
