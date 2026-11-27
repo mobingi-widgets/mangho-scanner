@@ -1176,6 +1176,15 @@ ipcMain.on('ui', (_e, action, arg) => {
   }
 });
 
+// No page of ours goes anywhere by itself (pages load by loadFile / a hash; links open in the
+// browser through shell). Anything dropped on or clicked in a window - a link, a file - would load
+// in it with its preload still there: every window refuses, and opens no new ones. A window that
+// sets its own open handler later (after this) keeps that one.
+app.on('web-contents-created', (_e, wc) => {
+  wc.on('will-navigate', (e) => e.preventDefault());
+  wc.setWindowOpenHandler(() => ({ action: 'deny' }));
+});
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {

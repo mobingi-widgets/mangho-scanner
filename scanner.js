@@ -39,17 +39,20 @@ function viewUrl(src, no) {
 }
 
 const ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+// A number reference outside Unicode (&#99999999;) would throw and stop every scan while that post
+// is on page 1; it stays as written, and so does a lone surrogate half (not a character).
 function decode(s) {
   return String(s || '').replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) => {
     if (e[0] === '#') {
       const n = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
-      return Number.isFinite(n) ? String.fromCodePoint(n) : m;
+      return Number.isFinite(n) && n >= 0 && n <= 0x10FFFF && !(n >= 0xD800 && n <= 0xDFFF) ? String.fromCodePoint(n) : m;
     }
     return ENT[e.toLowerCase()] ?? m;
   });
 }
+// (tags as [^<>]*: a long run of "<" with no ">" would make [^>]* take quadratic time)
 function plain(html) {
-  return decode(String(html || '').replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]*>/g, '')).replace(/\s+/g, ' ').trim();
+  return decode(String(html || '').replace(/<br\s*\/?>/gi, ' ').replace(/<[^<>]*>/g, '')).replace(/\s+/g, ' ').trim();
 }
 const kst = (s) => Date.parse(String(s).replace(' ', 'T') + '+09:00');
 
@@ -97,7 +100,10 @@ function parseList(html) {
     if (!no || !/^\d+$/.test(num)) continue;          // notices, surveys, ads
     if (/data-type="icon_notice"/.test(attrs)) continue;
     const tit = body.match(/<td class="gall_tit[^"]*"[^>]*>\s*<a[^>]*>([\s\S]*?)<\/a>/);
-    const w = body.match(/data-nick="([^"]*)"\s+data-uid="([^"]*)"\s+data-ip="([^"]*)"/);
+    // who wrote it: read in the writer cell only - the title cell comes first, and a title written
+    // to look like data-nick="…" data-uid="…" must not become someone else's post
+    const cell = (body.match(/<td class="gall_writer[\s\S]*?<\/td>/) || [])[0] || '';
+    const w = cell.match(/data-nick="([^"]*)"\s+data-uid="([^"]*)"\s+data-ip="([^"]*)"/);
     const date = (body.match(/<td class="gall_date" title="([^"]*)"/) || [])[1];
     const replies = Number((body.match(/<span class="reply_num">\[(\d+)/) || [])[1] || 0);
     const views = Number(((body.match(/<td class="gall_count">([^<]*)</) || [])[1] || '').replace(/\D/g, '')) || 0;
@@ -105,7 +111,7 @@ function parseList(html) {
     posts.push({
       no,
       title: tit ? plain(tit[1]) : '(제목 없음)',
-      nick: w ? decode(w[1]) : '?', uid, ip: w ? w[3] : '', ...writerOf(body, uid),
+      nick: w ? decode(w[1]) : '?', uid, ip: w ? w[3] : '', ...writerOf(cell, uid),
       t: date ? kst(date) : null,
       replies, views,
       pic: /icon_pic|icon_recomimg|main_img/.test(attrs),
@@ -126,7 +132,7 @@ function bodyText(html) {
   const start = html.indexOf('>', i) + 1;
   let end = html.indexOf('<script', start);
   if (end < 0 || end - start > 300000) end = Math.min(html.length, start + 300000);
-  return decode(html.slice(start, end).replace(/<br\s*\/?>/gi, '\n').replace(/<\/(?:p|div|li|h\d)>/gi, '\n').replace(/<[^>]*>/g, ''))
+  return decode(html.slice(start, end).replace(/<br\s*\/?>/gi, '\n').replace(/<\/(?:p|div|li|h\d)>/gi, '\n').replace(/<[^<>]*>/g, ''))
     .split('\n').map((s) => s.replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n');
 }
 
@@ -207,14 +213,14 @@ async function fetchComments(src, no, token) {
 function readComment(c) {
   const memo = String(c.memo || '');
   const dccons = [];
-  const imgRe = /<img[^>]*class="written_dccon[^"]*"[^>]*>/gi;
+  const imgRe = /<img[^<>]*class="written_dccon[^"]*"[^<>]*>/gi;
   let m;
   while ((m = imgRe.exec(memo))) {
     const name = (m[0].match(/conalt="([^"]*)"/) || m[0].match(/alt="([^"]*)"/) || m[0].match(/title="([^"]*)"/) || [])[1];
     if (name) dccons.push(decode(name));
   }
   // a reply's "@nickname" mention is not part of what it says
-  const text = plain(memo.replace(/<a[^>]*class="mention[^"]*"[^>]*>[\s\S]*?<\/a>/gi, ''));
+  const text = plain(memo.replace(/<a[^<>]*class="mention[^"]*"[^<>]*>[\s\S]*?<\/a>/gi, ''));
   const at = /^\d\d\.\d\d \d\d:\d\d/.test(c.reg_date || '') ? c.reg_date : null;
   return { text, dccons, at };
 }
@@ -240,7 +246,7 @@ const SUB_RULES = [
   // the grounds these parties farm: 정박지·허박지·매박지·매2박지, 허벅(지)
   ['사냥터', /박지|허벅/],
   // an end time: 7~8시까지, 오전 11시 까지, 열시반까지, 점검까지, ~9시, ~13:30, 20h
-  ['종료 시각', /(?:\d{1,2}\s*~\s*)?\d{0,2}\s*시\s*반?\s*까지|\d:\d\d\s*까지|점검\s*까지|~\s*\d{1,2}\s*(?:시|:\d\d)|\d+\s*h(?![a-z])/i],
+  ['종료 시각', /(?:\d{1,2}\s*~\s*)?\d{0,2}\s*시\s*반?\s*까지|\d:\d\d\s*까지|점검\s*까지|~\s*\d{1,2}\s*(?:시|:\d\d)|\d{1,3}\s*h(?![a-z])/i],
   // cave farming at a difficulty (동굴1, 동굴 매어2, 매어 동굴) and "아침10시"-style end times;
   // a bare 동굴 is left out - abyss runs say "지3 동굴만"
   ['동굴·아침', /동굴\s*(?:매어|매2|[12])|(?:매어|매2)\s*동굴|아침\s*\d/],
