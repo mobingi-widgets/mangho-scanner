@@ -293,10 +293,10 @@ function postMenuItems(p) {
   const k = authors && authorsLib.keyOf(p);
   if (k) {
     const e = authors.get(k);
-    const who = k.kind === 'ip' ? '이 IP 대역' : p.nick;
+    const who = whoOf(p);
     items.push({ type: 'sep' },
       e && e.hidden ? { type: 'item', id: 'unblock', label: `${who} 차단 해제` } : { type: 'item', id: 'block', label: `${who} 차단` },
-      { type: 'item', id: 'memo', label: e && e.memo ? '메모 고치기' : '메모 쓰기' });
+      { type: 'item', id: 'memo', label: `${who} 메모 ${e && e.memo ? '고치기' : '쓰기'}` });
   }
   items.push({ type: 'sep' }, { type: 'item', id: 'open', label: '글 열기' });
   return items;
@@ -323,6 +323,15 @@ function withAuthors(snap) {
   return { ...snap, posts: snap.posts.map((p) => ({ ...p, memo: authors.memo(p), blocked: authors.hidden(p) })) };
 }
 // the writer as the list keeps it (what was seen when it was registered)
+// how the 차단 · 메모 lines name a writer - as the author cell's 닉(코드) (user 2026-11-27, 1.8.1): a 고닉's
+// nick is its own; a 반고닉 needs its id (nicks repeat); a 유동 is an IP band. 매니저 · 부매니저 follow
+// their 고닉 / 반고닉 kind.
+function whoOf(p) {
+  const k = authorsLib.keyOf(p);
+  if (!k) return p.nick;
+  if (k.kind === 'ip') return `${p.nick}(${k.key}) 대역`;
+  return p.member === 'fixed' ? p.nick : `${p.nick}(${k.key})`;
+}
 function authorOf(p) {
   const k = authorsLib.keyOf(p);
   return k ? { ...k, member: k.kind === 'ip' ? 'guest' : p.member || '', nick: p.nick } : null;
@@ -333,8 +342,7 @@ async function blockWriter(p, on) {
   // a band hides other people of the same carrier too: the user says so first (a card of its own)
   if (on && a.kind === 'ip' && !(await authorsUi.confirmBand(a.key))) return;
   authors.set(a, { hidden: on, member: a.member, nick: a.nick });
-  const who = a.kind === 'ip' ? `IP 대역 ${a.key}` : a.nick;
-  notify({ id: 'block', text: on ? `${who} 차단함` : `${who} 차단 해제함`, level: 'info', sec: 2, by: '스캐너' });
+  notify({ id: 'block', text: `${whoOf(p)} — ${on ? '차단했습니다' : '차단을 해제했습니다'}`, level: 'info', sec: 2, by: '스캐너' });
 }
 function startAuthors() {
   authors = authorsLib.create({ file: path.join(app.getPath('userData'), 'authors.json') });

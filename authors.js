@@ -194,7 +194,7 @@ window.authors.on((d) => {
     askWarn(d.key.key, () => window.authors.ui('add', { text: $('addtext').value, confirmed: true }));
   } else if (d.type === 'added') {
     $('addtext').value = '';
-    say(`${d.key.key} — 차단했습니다`);
+    say(`${d.key.key}${d.key.kind === 'ip' ? ' 대역' : ''} — 차단했습니다`);
   } else if (d.type === 'say') {
     say(d.text, d.bad);
   }
