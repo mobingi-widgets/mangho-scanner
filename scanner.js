@@ -6,7 +6,7 @@
 // and nothing of theirs is read (user 2026-11-27: after an hour no 망호 is alive).
 //
 // A post counts as departed (출항 - left, full or called off) when its title, or a comment of its
-// author (the text, or a 디시콘's name - the gallery's 출항티콘 is named '출항' - or a known 출항 image), has a closing word:
+// author (the text, or a 디시콘's name - the gallery's 출항티콘 is named '출항' - or a known image), has a closing word:
 // 출항 · 출발 · 마감 · 종료 anywhere, 완 · 풀 · 펑 · 침몰 · 끝 · 취소 ... standing alone (closingWord below).
 // The author is matched by account id (고닉/반고닉), or for 유동 by nickname + IP prefix.
 //
@@ -372,14 +372,16 @@ async function fetchComments(src, no, token) {
 function readComment(c) {
   const memo = String(c.memo || '');
   const dccons = [];
-  const dcconNos = [];        // each one's image token (dccon.php?no=…), next to its name: DCCON_IMAGES
+  const dcconNos = [];        // each one's image path (dccon.php?no=…), next to its name: DCCON_IMAGES
   const imgRe = /<img[^<>]*class="written_dccon[^"]*"[^<>]*>/gi;
   let m;
   while ((m = imgRe.exec(memo))) {
     const name = (m[0].match(/conalt="([^"]*)"/) || m[0].match(/alt="([^"]*)"/) || m[0].match(/title="([^"]*)"/) || [])[1];
     if (!name) continue;
-    dccons.push(decode(name));
-    dcconNos.push(((m[0].match(/dccon\.php\?no=([0-9a-z]+)/i) || [])[1] || '').toLowerCase() || null);
+    const no = ((m[0].match(/dccon\.php\?no=([0-9a-z]+)/i) || [])[1] || '').toLowerCase() || null;
+    const known = no && DCCON_IMAGES.get(no);
+    dccons.push(known ? `${known.pack} ${known.num}` : decode(name));     // "모비에반콘 24", not a bare "24"
+    dcconNos.push(no);
   }
   // a reply's "@nickname" mention is not part of what it says
   const text = plain(memo.replace(/<a[^<>]*class="mention[^"]*"[^<>]*>[\s\S]*?<\/a>/gi, ''));
@@ -532,19 +534,26 @@ function liveUntil(title, t, kind) {
 //    In a sentence they say something else: "1번째 완료 다시 ㄱㄱ" (a 품앗이 going again), "딜러2명끝 힐1구함",
 //    "5분후 침몰 예정", "침몰 기념 스카스 재 망호", "걍 침몰시킴", 풀강, 완전 ...
 //  - a 디시콘 whose name has 출항 · 출발 · 침몰 · 펑 (the 출항티콘, 망호펑), or whose image is a known
-//    출항 one (DCCON_IMAGES).
+//    closing one (DCCON_IMAGES: 모비에반콘 24 출항, 45 침몰).
 // source.keywords: more words that count anywhere, on top of these (before 1.12.0 the whole list).
 const CLOSE_ANY_RE = /출항|출발|마감|종료/g;
 const CLOSE_ANY = ['출항', '출발', '마감', '종료'];
 const CLOSE_DCCON = ['출항', '출발', '침몰', '펑'];
-// 디시콘 known by their image (the token in dccon.php?no=…), not their name: packs number their images,
-// so a name like "24" says nothing by itself (user 2026-11-28).
-//   "24" - a 출항티콘 from a pack other than the gallery's common one (whose own 11 · 16 · 17 are greetings
-//   posted while still recruiting); the author's last comment on 4 잠망호 posts, always this token.
-// If DC ever changes how the token is written, an image here just stops matching - as before 1.12.0.
+// 디시콘 known by their image, not their name (user 2026-11-28): a comment's 디시콘 is named by its number in
+// its pack, so "24" says nothing by itself - the gallery's common pack 모비광부콘 has its own #24, "같이 레이드
+// 가주면 안돼?" (a recruiting plea), and its 15 · 16 · 17 ("망호 1/4" ... "3/4") are recruiting status.
+// An image is matched by its path: the comment's dccon.php?no=… value, exactly. No request at run time.
+// To add one: look its code up with /dccon/package_detail (the same request as the 디시콘 보기 button); the
+// answer lists the pack's images, each with this path. If DC ever re-encodes paths, an entry simply stops
+// matching (a name-only 디시콘 again, as before 1.12.0). Shown in the tooltip as "모비에반콘 24".
 const DCCON_IMAGES = new Map([
-  ['62b5df2be09d3ca567b1c5bc12d46b394aa3b1058c6e4d0ca41648b658e82474e6016f3e758418c2727d74f8eb7df3b8d266e6597ca0e40e483fc093f90ef1ea77cb063005c82e6bf9fd7bd68b5507c30aba9797f9446ea2', '출항'],   // "24"
-]);
+  // a girl saluting "출항~" - the author's last comment on 4 잠망호 posts
+  { pack: '모비에반콘', package: 176258, num: 24, idx: 7560813, word: '출항',
+    path: '62b5df2be09d3ca567b1c5bc12d46b394aa3b1058c6e4d0ca41648b658e82474e6016f3e758418c2727d74f8eb7df3b8d266e6597ca0e40e483fc093f90ef1ea77cb063005c82e6bf9fd7bd68b5507c30aba9797f9446ea2' },
+  // the same girl in the water, "침몰…" (differs from #24 only in …aba9194f… / …aba9797f…)
+  { pack: '모비에반콘', package: 176258, num: 45, idx: 7560834, word: '침몰',
+    path: '62b5df2be09d3ca567b1c5bc12d46b394aa3b1058c6e4d0ca41648b658e82474e6016f3e758418c2727d74f8eb7df3b8d266e6597ca0e40e483fc093f90ef1ea77cb063005c82e6bf9fd7bd68b5507c30aba9194f9446ea2' },
+].map((d) => [d.path, d]));
 const ALONE = '완료|완|풀방|풀|펑|침몰|끝|취소|ㅊㅎ';         // the longer first
 const ALONE_TAIL = '(?:할게요?|합니다|됨|됐(?:음|어요?)|했(?:음|어요?)|함|임|요)?';   // (취소할게), 펑함
 const ALONE_MARK = '[\\s.,~!…ㅠㅜㅋ^]*';                    // 완~!  침몰!!  펑..  펑ㅠㅠ
@@ -583,9 +592,9 @@ function closingWord(text, from, extra = []) {
   return null;
 }
 
-// a 디시콘's word: by its name, else by its image token (no, from readComment's dcconNos)
+// a 디시콘's word: by its name, else by its image (no: its path, from readComment's dcconNos)
 const dcconWord = (name, extra = [], no = null) => [...CLOSE_DCCON, ...extra].find((k) => String(name).includes(k))
-  || (no && DCCON_IMAGES.get(String(no).toLowerCase())) || null;
+  || (no && (DCCON_IMAGES.get(String(no).toLowerCase()) || {}).word) || null;
 
 // -------------------------------------------------------------------- one scan
 
