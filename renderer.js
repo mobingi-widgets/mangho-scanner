@@ -10,9 +10,9 @@ let snap = null;
 let problems = [];
 let busy = false;
 let tab = 'normal';
-const KIND = { normal: '일반 망호', sub: '잠수함 망호' };
+const KIND = { normal: '망호', sub: '잠망호' };
 // what each tab shows (scanner.js liveUntil; user 2026-11-27: after an hour no 망호 is alive)
-const LIVE_TEXT = { normal: '올라온 지 1시간 안', sub: '제목의 끝 시각까지 · 없으면 8시간' };
+const LIVE_TEXT = { normal: '1시간 안', sub: '제목의 끝 시각까지 (없으면 8시간)' };
 // 내 직군 (user 2026-11-27): a post whose "랏" asks only for other roles is not for me -
 // its own colour (purple, icon too) and out of the 모집 중 count. 모두 = no filter.
 let role = 'all';
@@ -162,50 +162,40 @@ function postModel(p) {
   const writer = `${p.nick}${code ? `(${code})` : ''} · ${MEMBER[memberOf(p)]}`;
   const rows = [];
   // the party password first: the line is opened to read it (user 2026-11-27)
-  if (p.pw && p.pw.value) rows.push(['암호', p.pw.value + (p.pw.from === 'comment' ? '  (작성자 댓글)' : p.pw.from === 'title' ? '  (제목)' : ''), 'pw']);
-  else if (p.pw) rows.push(['암호', '걸려 있음 — 귓속말 등으로 받기 (글 참고)', 'pw']);
+  if (p.pw && p.pw.value) rows.push(['암호', p.pw.value + (p.pw.from === 'comment' ? '  (작성자 댓글)' : ''), 'pw']);
+  else if (p.pw) rows.push(['암호', '귓속말로 받기 (본문 참고)', 'pw']);
   rows.push(
-    ['종류', p.kind === 'sub' ? `잠수함 망호 — "${p.kindMatch}"` : '일반 망호'],
     ['작성자', writer],
     ['작성', p.t ? `${hhmm(p.t)} · ${ageText(now - p.t)} 전` : '?'],
     ['댓글 · 조회', `${p.replies} · ${p.views}`],
   );
-  if (p.kind === 'sub' && p.until) rows.push(['끝', `${dayHhmm(p.until)} ${p.untilFrom === 'title' ? '(제목)' : '(제목에 없음 → 8시간)'} — 지나면 목록에서 빠짐`]);
+  if (p.kind === 'sub' && p.until) rows.push(['끝', dayHhmm(p.until) + (p.untilFrom === 'title' ? '' : ' (제목에 없음 · 8시간)')]);
   if (p.roles && p.roles.length) {
-    const names = p.roles.map((r) => ROLE_NAME[r]).join('·');
-    if (role === 'all') rows.push(['직군', `${p.roleText} (${names})`]);
-    else if (notMine(p)) rows.push(['직군', `${p.roleText} → 내 직군(${ROLE_NAME[role]})과 다름`, 'other']);
-    else rows.push(['직군', `${p.roleText} → 내 직군(${ROLE_NAME[role]}) 맞음`, 'good']);
+    rows.push(['직군', p.roleText, role === 'all' ? '' : notMine(p) ? 'other' : 'good']);
   }
   let state;
-  if (isStale(p, now)) state = ['상태', '20분 지남 — 출항으로 셈', 'dim'];
-  else if (!p.departed && notMine(p)) state = ['상태', '내 직군 자리 아님 — 모집 중에서 뺌', 'other'];
+  if (isStale(p, now)) state = ['상태', '20분 지남', 'dim'];
+  else if (!p.departed && notMine(p)) state = ['상태', '직군 다름', 'other'];
   else if (!p.departed) state = ['상태', '모집 중', 'good'];
-  else if (p.departed.by === 'title') state = ['상태', `출항 — 제목에 "${p.departed.word || '출항'}"`, 'dim'];
-  else state = ['상태', `출항 — 작성자 댓글 "${p.departed.word || '출항'}" ${cmtTime(p.departed.at)}`, 'dim'];
+  else if (p.departed.by === 'title') state = ['상태', '출항 (제목)', 'dim'];
+  else state = ['상태', `출항 (작성자 댓글 ${cmtTime(p.departed.at)})`, 'dim'];
   rows.push(state);
   const lines = [];
   if (p.departed && p.departed.by === 'comment') lines.push(`작성자: ${said(p.departed)}`);
   else if (p.authorLast) lines.push(`작성자 최근 댓글 ${cmtTime(p.authorLast.at)}: ${said(p.authorLast)}`);
-  return { title: p.title, sub: `#${p.no}`, rows, lines, note: '클릭: 브라우저로 열기' };
+  return { title: p.title, sub: `#${p.no}`, rows, lines, note: '클릭: 글 열기' };
 }
 
 function tabModel(kind, c) {
   if (!snap) return { lines: ['아직 스캔 전'] };
-  const kw = (snap.source.keywords || ['출항']).join('", "');
   return {
-    title: KIND[kind], sub: `🐳 망호 말머리 · ${snap.source.name}`,
+    title: KIND[kind], sub: snap.source.name,
     rows: [['모집 중', String(c.open), 'good'],
-      ...(role !== 'all' ? [['직군 다름', `${c.other} (내 직군 ${ROLE_NAME[role]})`, 'other']] : []),
+      ...(role !== 'all' ? [['직군 다름', String(c.other), 'other']] : []),
       ['20분 지남', String(c.stale), 'dim'], ['출항', String(c.gone), 'dim'],
       ['보는 범위', LIVE_TEXT[kind]],
-      ['마지막 스캔', `${hhmm(snap.t)} · 1분마다 · 요청 ${snap.requests}회`]],
-    note: (kind === 'sub'
-      ? '잠수함 = 자동 사냥을 오래 돌리는 망호. 제목에 잠망·수면·자러·박지·허벅·"N시까지"·"~N시"·동굴1/매어 같은 말\n'
-      : '일반 = 레이드·어비스 등 한 번 모여 공략하는 망호 (잠수함이 아닌 것)\n') +
-      `${c.total}개 · 제목이나 작성자 댓글(디시콘 이름 포함)에 "${kw}" → 출항 · 20분 지나면 출항으로 셈\n` +
-      '범위를 지난 글은 보이지 않고 더 읽지 않음 · 자물쇠 = 암호 (줄에 마우스)\n' +
-      (kind === tab ? '클릭: 목록 접기 / 펼치기' : '클릭: 이 탭 보기'),
+      ['마지막 스캔', `${hhmm(snap.t)} · 요청 ${snap.requests}회`]],
+    note: kind === tab ? '클릭: 목록 접기 / 펼치기' : '',
   };
 }
 
@@ -285,9 +275,8 @@ function updateRoleChip() {
   chip.classList.toggle('set', role !== 'all');
   chip.tipModel = {
     title: '내 직군', sub: ROLE_NAME[role],
-    lines: ['제목이 찾는 직군(랏힐 · 랏 힐or딜 · 힐러구함 · 딜러 구함 · 탱커괌)에 내 직군이 없으면 보라색, 모집 중 개수에서 뺌',
-      '랏1처럼 숫자만 있거나 직군 표기가 없으면(직업명 · 서폿 포함) 누구나 갈 수 있는 글로 봄'],
-    note: '클릭: 직군 고르기 (모두 · 힐 · 탱 · 딜)',
+    lines: ['설정한 직군과 일치하지 않는 게시글을 흐리게 표시합니다'],
+    note: '클릭: 직군 고르기',
   };
 }
 function setRole(r) {
@@ -423,9 +412,8 @@ function setProblems(list) {
   m.classList.toggle('warn', bad);
   const upd = m.dataset.upd;
   m.tipModel = {
-    lines: [...(bad ? list.map((p) => '⚠ ' + p) : ['메뉴 — 스캔 정보 · 지금 스캔 · 망호 탭 열기 · 위치 초기화 · 표시 · 종료']),
-      ...(upd ? [`⬆ 새 버전 ${upd} — 메뉴에서 설치`] : [])],
-    note: '클릭: 메뉴 · 드래그: 위치 옮기기 (가장자리에 붙음 · 다른 오버레이는 피함)',
+    lines: [...(bad ? list.map((p) => '⚠ ' + p) : []), ...(upd ? [`새 버전 ${upd}`] : [])],
+    note: '클릭: 메뉴 · 끌기: 위치 옮기기',
   };
 }
 window.setProblems = setProblems;
@@ -538,7 +526,7 @@ const wsizer = $('wsizer');
 let defWidth = 258;
 function setWidthTip(w, def) {
   if (def) defWidth = def;
-  wsizer.tipModel = { lines: [`너비 ${w}px — 끌기: 너비 바꾸기 (게임 창의 40%까지, 다른 오버레이 앞에서 멈춤)`, `두 번 클릭: 기본 너비 ${defWidth}px`] };
+  wsizer.tipModel = { lines: [`너비 ${w}px`, '끌기: 너비 바꾸기', `두 번 클릭: 기본 너비 (${defWidth}px)`] };
 }
 function headNeeds() {
   const head = document.querySelector('.head');
@@ -607,7 +595,7 @@ window.mangho.onFeed((d) => {
     setWidthTip(d.width);
   } else if (d.type === 'mode') {
     document.body.classList.toggle('app', !!d.app);
-    $('modepill').tipModel = { lines: ['게임 창을 찾지 못해 일반 창으로 바뀌었습니다', '윗줄을 끌어 옮기기 · 게임이 켜지면 오버레이로 돌아감'] };
+    $('modepill').tipModel = { lines: ['게임 창이 없어 일반 창으로 표시합니다', '게임이 켜지면 오버레이로 돌아갑니다'] };
     $('modepill').classList.add('tipm');
   } else if (d.type === 'room') {
     room = { h: d.h, game: d.game, max: d.max };

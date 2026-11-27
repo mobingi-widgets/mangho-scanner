@@ -474,7 +474,7 @@ function menuItems() {
   if (scan.paused) scanValue = '숨긴 동안 쉼';
   else if (scan.okAt) scanValue = `${ago(scan.okAt)} 전 · 다음 ${Math.max(0, Math.round((scan.nextAt - Date.now()) / 1000))}초`;
   else scanValue = scan.busy ? '첫 스캔 중' : `아직 못 함${scan.error ? ` — ${scan.error}` : ''}`;
-  items.push({ type: 'info', label: '스캔 · 1분마다', value: scanValue });
+  items.push({ type: 'info', label: '스캔', value: scanValue });
   if (scan.last) {
     for (const [kind, label] of [['normal', '망호'], ['sub', '잠망호']]) {
       const c = tabCounts(kind);
@@ -490,24 +490,24 @@ function menuItems() {
   items.push({ type: 'sep' });
   items.push(...(uui ? uui.menuItems() : []));
   items.push({ type: 'sep' });
-  items.push({ type: 'item', id: 'scan', label: '지금 스캔', tip: '1분을 기다리지 않고 지금 읽습니다' });
+  items.push({ type: 'item', id: 'scan', label: '지금 스캔' });
   items.push({ type: 'item', id: 'open-list', label: '망호 탭 브라우저로 열기' });
   items.push({ type: 'sep' });
   if (appMode) items.push({ type: 'item', id: 'minimize', label: '창 최소화' });
-  items.push({ type: 'item', id: 'reset-pos', label: '위치 초기화', tip: '옮기기는 ☰를 끌어서 (가장자리에 붙고 다른 오버레이는 피함)' });
+  items.push({ type: 'item', id: 'reset-pos', label: '위치 초기화', tip: '옮기려면 ☰를 끕니다' });
   items.push({ type: 'segment', id: 'align', label: '정렬', options: [['left', '왼쪽'], ['right', '오른쪽']].map(([id, label]) => ({ id, label, on: cfg.align === id })) });
   items.push({
-    type: 'segment', id: 'show', label: '표시', tip: '숨기면 트레이 아이콘으로 다시 표시 · 숨긴 동안 스캔도 쉼',
+    type: 'segment', id: 'show', label: '표시', tip: '숨기면 트레이 아이콘으로 다시 표시합니다',
     options: [['always', '항상'], ['game', '게임 앞'], ['hidden', '숨김']].map(([id, label]) => ({ id, label, on: cfg.show === id })),
   });
   items.push({
     type: 'segment', id: 'nickmode', label: '작성자',
-    tip: '제목 옆 작성자 칸. 코드 = 회원 아이디 / 유동 IP 앞자리 · 겹칠 때 = 같은 닉이 둘 이상일 때만 코드',
+    tip: '겹칠 때: 같은 닉이 둘 이상이면 코드를 붙입니다',
     options: [['off', '끔'], ['nick', '닉'], ['code', '닉+코드'], ['dup', '겹칠 때']].map(([id, label]) => ({ id, label, on: cfg.nickMode === id })),
   });
   items.push(...(toast ? toast.menuItems() : []));      // 알림 · 알림 위치 · 알림 등급 · 시험 알림
   items.push({
-    type: 'segment', id: 'font', label: '글자', tip: '오버레이·툴팁·메뉴·알림·업데이트 창·이용 안내의 글자 크기 (게임 창 크기에 맞춘 배율 위에)',
+    type: 'segment', id: 'font', label: '글자',
     options: [['small', '작게'], ['mid', '중간'], ['large', '크게']].map(([id, label]) => ({ id, label, on: cfg.font === id })),
   });
   items.push({
@@ -839,10 +839,9 @@ ipcMain.on('ui', (_e, action, arg) => {
     openMenu(() => [
       { type: 'title', label: '내 직군' },
       {
-        type: 'segment', id: 'role', label: '직군', tip: '찾는 직군(랏힐 · 힐러구함 …)에 내 직군이 없는 글은 보라색, 모집 중에서 뺌',
+        type: 'segment', id: 'role', label: '직군', tip: '설정한 직군과 일치하지 않는 게시글을 흐리게 표시합니다',
         options: ['all', 'heal', 'tank', 'deal'].map((r) => ({ id: r, label: ROLE_NAME[r], on: (cfg.role || 'all') === r })),
       },
-      { type: 'info', label: '모두 = 거르지 않음 · 숫자만 있는 랏1·표기 없음 = 누구나' },
     ], (id, r) => { if (id === 'role') { saveCfg({ role: r }); toPage(windowState()); } return false; });
   } else if (action === 'open') {
     // only a post from the last scan, by number - the page never hands over a URL
