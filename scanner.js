@@ -6,7 +6,7 @@
 // and nothing of theirs is read (user 2026-11-27: after an hour no 망호 is alive).
 //
 // A post counts as departed (출항 - left, full or called off) when its title, or a comment of its
-// author (the text, or a 디시콘's name: the gallery's 출항티콘 is named '출항'), has a closing word:
+// author (the text, or a 디시콘's name - the gallery's 출항티콘 is named '출항' - or a known 출항 image), has a closing word:
 // 출항 · 출발 · 마감 · 종료 anywhere, 완 · 풀 · 펑 · 침몰 · 끝 · 취소 ... standing alone (closingWord below).
 // The author is matched by account id (고닉/반고닉), or for 유동 by nickname + IP prefix.
 //
@@ -372,16 +372,19 @@ async function fetchComments(src, no, token) {
 function readComment(c) {
   const memo = String(c.memo || '');
   const dccons = [];
+  const dcconNos = [];        // each one's image token (dccon.php?no=…), next to its name: DCCON_IMAGES
   const imgRe = /<img[^<>]*class="written_dccon[^"]*"[^<>]*>/gi;
   let m;
   while ((m = imgRe.exec(memo))) {
     const name = (m[0].match(/conalt="([^"]*)"/) || m[0].match(/alt="([^"]*)"/) || m[0].match(/title="([^"]*)"/) || [])[1];
-    if (name) dccons.push(decode(name));
+    if (!name) continue;
+    dccons.push(decode(name));
+    dcconNos.push(((m[0].match(/dccon\.php\?no=([0-9a-z]+)/i) || [])[1] || '').toLowerCase() || null);
   }
   // a reply's "@nickname" mention is not part of what it says
   const text = plain(memo.replace(/<a[^<>]*class="mention[^"]*"[^<>]*>[\s\S]*?<\/a>/gi, ''));
   const at = /^\d\d\.\d\d \d\d:\d\d/.test(c.reg_date || '') ? c.reg_date : null;
-  return { text, dccons, at };
+  return { text, dccons, dcconNos, at };
 }
 
 function byAuthor(post, c) {
@@ -528,11 +531,20 @@ function liveUntil(title, t, kind) {
 //      the start before a bracket: "완)물길 망호".
 //    In a sentence they say something else: "1번째 완료 다시 ㄱㄱ" (a 품앗이 going again), "딜러2명끝 힐1구함",
 //    "5분후 침몰 예정", "침몰 기념 스카스 재 망호", "걍 침몰시킴", 풀강, 완전 ...
-//  - a 디시콘 whose name has 출항 · 출발 · 침몰 · 펑 (the 출항티콘, 망호펑).
+//  - a 디시콘 whose name has 출항 · 출발 · 침몰 · 펑 (the 출항티콘, 망호펑), or whose image is a known
+//    출항 one (DCCON_IMAGES).
 // source.keywords: more words that count anywhere, on top of these (before 1.12.0 the whole list).
 const CLOSE_ANY_RE = /출항|출발|마감|종료/g;
 const CLOSE_ANY = ['출항', '출발', '마감', '종료'];
 const CLOSE_DCCON = ['출항', '출발', '침몰', '펑'];
+// 디시콘 known by their image (the token in dccon.php?no=…), not their name: packs number their images,
+// so a name like "24" says nothing by itself (user 2026-11-28).
+//   "24" - a 출항티콘 from a pack other than the gallery's common one (whose own 11 · 16 · 17 are greetings
+//   posted while still recruiting); the author's last comment on 4 잠망호 posts, always this token.
+// If DC ever changes how the token is written, an image here just stops matching - as before 1.12.0.
+const DCCON_IMAGES = new Map([
+  ['62b5df2be09d3ca567b1c5bc12d46b394aa3b1058c6e4d0ca41648b658e82474e6016f3e758418c2727d74f8eb7df3b8d266e6597ca0e40e483fc093f90ef1ea77cb063005c82e6bf9fd7bd68b5507c30aba9797f9446ea2', '출항'],   // "24"
+]);
 const ALONE = '완료|완|풀방|풀|펑|침몰|끝|취소|ㅊㅎ';         // the longer first
 const ALONE_TAIL = '(?:할게요?|합니다|됨|됐(?:음|어요?)|했(?:음|어요?)|함|임|요)?';   // (취소할게), 펑함
 const ALONE_MARK = '[\\s.,~!…ㅠㅜㅋ^]*';                    // 완~!  침몰!!  펑..  펑ㅠㅠ
@@ -571,7 +583,9 @@ function closingWord(text, from, extra = []) {
   return null;
 }
 
-const dcconWord = (name, extra = []) => [...CLOSE_DCCON, ...extra].find((k) => String(name).includes(k)) || null;
+// a 디시콘's word: by its name, else by its image token (no, from readComment's dcconNos)
+const dcconWord = (name, extra = [], no = null) => [...CLOSE_DCCON, ...extra].find((k) => String(name).includes(k))
+  || (no && DCCON_IMAGES.get(String(no).toLowerCase())) || null;
 
 // -------------------------------------------------------------------- one scan
 
@@ -643,7 +657,7 @@ async function scan(state, { kinds = ['normal', 'sub'] } = {}) {
           await pause();
           const mine = (await fetchComments(src, p.no, token)).filter((c) => byAuthor(p, c) && !deleted(c)).map(readComment);
           post.pwComments = mine.map((c) => c.text).filter((s) => PW_RE.test(s));
-          const word = (c) => closingWord(c.text, 'comment', extra) || c.dccons.map((n) => dcconWord(n, extra)).find(Boolean) || null;
+          const word = (c) => closingWord(c.text, 'comment', extra) || c.dccons.map((n, i) => dcconWord(n, extra, (c.dcconNos || [])[i])).find(Boolean) || null;
           const hit = mine.filter(word);
           const last = hit.length ? hit[hit.length - 1] : null;
           post.departed = last ? { by: 'comment', word: word(last), text: last.text, dccons: last.dccons, at: last.at } : null;
