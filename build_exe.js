@@ -34,6 +34,8 @@ const NAME = '망호 스캐너';
     prune: true,                       // devDependencies (electron, packager) stay out
     ignore: [/^\/build_dist\.py$/, /^\/build_exe\.js$/, /\.bat$/, /^\/package-lock\.json$/,
       /^\/README\.md$/, /^\/CHANGELOG\.md$/, /^\/icon\.ico$/, /^\/docs($|\/)/, /^\/\.git/,
+      // instructions for AI agents in the workspace - never shipped
+      /^\/AGENTS\.md$/, /^\/CLAUDE\.md$/, /^\/\.claude($|\/)/,
       // Python caches carry the absolute path of the workspace (build_dist.py refuses them too)
       /(^|\/)__pycache__($|\/)/, /\.pyc$/],
     win32metadata: {
