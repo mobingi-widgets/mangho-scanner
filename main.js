@@ -728,6 +728,8 @@ async function demoShots() {
   if (await js("window.__tipTest('.post:has(.lock):not(.rolex):not(.gone)')")) { await wait(700); await save(tipWin, 'tooltip-pw'); }
   tipAnchor = null;
   placeTip();
+  // the menu as it nearly always is: the update check has run (v… 최신)
+  Object.assign(uui.state(), { info: { available: false }, at: Date.now() - 12 * 60000, error: '' });
   popupMenu();
   await wait(1200);
   await save(ctx.window(), 'menu');
