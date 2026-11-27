@@ -66,6 +66,24 @@ async function get(url, opts = {}) {
 
 // ------------------------------------------------------------------- the list
 
+// Who wrote it, from the icon file in the writer cell (2026-11-27, 망호 head + page 1: fix_nik 43 ·
+// nik 39 · newnik 4 · fix_newnik 1 · fix_sub_managernik 2 · managernik 1 · fix_managernik 1;
+// 유동 = no account, no icon, data-ip only):
+//   member  fixed = 고닉 (fix_…) · semi = 반고닉 (an account, any other …nik) · guest = 유동
+//   newbie  a new account (…newnik)
+//   manager 'manager' | 'sub' (…sub_managernik) | null
+// An unknown …nik icon still falls under these rules; an account without any icon is semi.
+function writerOf(row, uid) {
+  if (!uid) return { member: 'guest', newbie: false, manager: null };
+  const cell = (row.match(/<td class="gall_writer[\s\S]*?<\/td>/) || [])[0] || row;
+  const icon = ((cell.match(/\/([a-z_]*nik)\.(?:gif|png|webp|svg)/i) || [])[1] || '').toLowerCase();
+  return {
+    member: icon.startsWith('fix_') ? 'fixed' : 'semi',
+    newbie: icon.includes('newnik'),
+    manager: icon.includes('sub_manager') ? 'sub' : icon.includes('manager') ? 'manager' : null,
+  };
+}
+
 function parseList(html) {
   const token = (html.match(/name="e_s_n_o"\s+value="([^"]*)"/) || html.match(/id="e_s_n_o"[^>]*value="([^"]*)"/) || [])[1] || '';
   const posts = [];
@@ -83,14 +101,11 @@ function parseList(html) {
     const date = (body.match(/<td class="gall_date" title="([^"]*)"/) || [])[1];
     const replies = Number((body.match(/<span class="reply_num">\[(\d+)/) || [])[1] || 0);
     const views = Number(((body.match(/<td class="gall_count">([^<]*)</) || [])[1] || '').replace(/\D/g, '')) || 0;
-    // who wrote it: 고닉 (fixed nickname, icon fix_nik.gif), 반고닉 (an account, nik.gif /
-    // newnik.gif) or 유동 (no account - the IP's first two parts tell them apart, shared by many)
     const uid = w ? w[2] : '';
-    const member = !uid ? 'guest' : /fix_[a-z_]*nik/i.test(body) ? 'fixed' : 'semi';
     posts.push({
       no,
       title: tit ? plain(tit[1]) : '(제목 없음)',
-      nick: w ? decode(w[1]) : '?', uid, ip: w ? w[3] : '', member,
+      nick: w ? decode(w[1]) : '?', uid, ip: w ? w[3] : '', ...writerOf(body, uid),
       t: date ? kst(date) : null,
       replies, views,
       pic: /icon_pic|icon_recomimg|main_img/.test(attrs),
@@ -427,7 +442,7 @@ async function scan(state) {
   };
 }
 
-module.exports = { DEFAULT_SOURCE, createState, scan, listUrl, viewUrl, parseList, readComment, byAuthor, kindOf, SUB_RULES, rolesOf,
+module.exports = { DEFAULT_SOURCE, createState, scan, listUrl, viewUrl, parseList, writerOf, readComment, byAuthor, kindOf, SUB_RULES, rolesOf,
   bodyText, passwordIn, passwordOf, endTimeOf, liveUntil };
 
 if (require.main === module) {

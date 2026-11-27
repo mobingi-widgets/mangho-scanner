@@ -83,26 +83,29 @@ function lockIcon() {
 // ------------------------------------------------------------------ author
 // "닉네임(식별코드)" (user 2026-11-27): the code tells writers with the same nick apart -
 // a member's account id (고닉 / 반고닉), a 유동's IP prefix (shared by many: weaker).
-// In the narrow column the nick gives way ("…") and the code stays. 고닉 = filled dot,
-// 반고닉 = hollow dot, 유동 = none.
+// In the narrow column the nick gives way ("…") and the code stays. Before the nick a picture
+// of the writer's kind (user 2026-11-27, the designer's - style.css .mi, author-icons/*.svg):
+// 고닉 · 반고닉 · 신규 고닉 · 신규 반고닉 · 매니저 · 부매니저; 유동 none. Its name is in the tooltip.
 let nickMode = 'off';
 const MEMBER = { fixed: '고닉', semi: '반고닉', guest: '유동' };
 const memberOf = (p) => p.member || (p.uid ? 'semi' : 'guest');
+// -> [picture (class), name]
+function writerKind(p) {
+  const m = memberOf(p);
+  if (m !== 'guest' && p.manager === 'manager') return ['manager', '매니저'];
+  if (m !== 'guest' && p.manager === 'sub') return ['deputy', '부매니저'];
+  if (m !== 'guest' && p.newbie) return [`new-${m}`, `신규 ${MEMBER[m]}`];
+  return [m, MEMBER[m]];
+}
 function codeOf(p, short) {
   const c = p.uid || p.ip || '';
   return short && c.length > 8 ? c.slice(0, 7) + '…' : c;
 }
 function nickCell(p, withCode) {
   const cell = el('span', 'nick');
-  cell.append(el('span', 'nn', p.nick));
+  cell.append(el('span', `mi ${writerKind(p)[0]}`), el('span', 'nn', p.nick));
   const code = withCode ? codeOf(p, true) : '';
-  if (code) {
-    const m = memberOf(p);
-    const c = el('span', `code ${m}`);
-    if (m !== 'guest') c.append(el('span', 'mm'));
-    c.append(document.createTextNode(code));
-    cell.append(c);
-  }
+  if (code) cell.append(el('span', 'code', code));
   return cell;
 }
 
@@ -160,7 +163,7 @@ function said(c) {
 function postModel(p) {
   const now = Date.now();
   const code = codeOf(p, false);
-  const writer = `${p.nick}${code ? `(${code})` : ''} · ${MEMBER[memberOf(p)]}`;
+  const writer = `${p.nick}${code ? `(${code})` : ''} · ${writerKind(p)[1]}`;
   const rows = [];
   // the party password first: the line is opened to read it (user 2026-11-27)
   if (p.pw && p.pw.value) rows.push(['암호', p.pw.value + (p.pw.from === 'comment' ? '  (작성자 댓글)' : ''), 'pw']);
