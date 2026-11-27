@@ -45,7 +45,7 @@ function makeUpdateUi() {
     stageRoot: () => path.join(process.resourcesPath, '.update'),
     previousDir: () => path.join(process.resourcesPath, '.update', 'previous'),
     installOpts: () => ({ appDir: path.join(process.resourcesPath, 'app'), keep: [], launch: process.execPath, launchCwd: path.dirname(process.execPath) }),
-    cfg: () => cfg, saveCfg, near: () => gameRectDip(),
+    cfg: () => cfg, saveCfg, near: () => gameRectDip(), avoid: overlayRects,
     // results and "x.y.z로 업데이트됨" go to the toast window; with toasts off (or below the level) the pill
     page: (m) => { if (m.type !== 'update-toast' || !notify({ text: m.text, level: m.level, sec: m.sec, by: '업데이트' })) toPage(m); },
     quit: () => app.quit(),
@@ -574,10 +574,22 @@ function raise() {
   win.setAlwaysOnTop(true, 'screen-saver');
   win.moveTop();
   // the 차단·메모 list and the band card stay above the overlay (user report 2026-11-27: covered within
-  // 2 s); with either up, the tooltip and a toast go back above them
-  if (authorsUi && authorsUi.keepTop()) {
+  // 2 s), so do the update window and the notice (1.9.2); with any of them up, the tooltip and a
+  // toast go back above them
+  const up = [authorsUi && authorsUi.keepTop(), uui && uui.keepTop(), consent.keepTop()];
+  if (up.some(Boolean)) {
     for (const w of [tipWin, toast && toast.window()]) if (w && !w.isDestroyed() && w.isVisible()) w.moveTop();
   }
+}
+
+// The overlays a dialog of ours (update window, notice) opens clear of (1.9.2 / 1.6.2, user report:
+// it went under them): this program's window and the other program's (dock.others(), the shared
+// position file) - DIP rectangles.
+function overlayRects() {
+  const out = [];
+  if (win && !win.isDestroyed() && win.isVisible()) out.push(win.getBounds());
+  if (dock) for (const r of dock.others()) out.push({ x: r.x, y: r.y, width: r.w, height: r.h });
+  return out;
 }
 
 function place() {
@@ -817,7 +829,7 @@ function menuAct(id, opt) {
     case 'scale': saveCfg({ scale: stepped(opt, SCALE, cfg.scale) }); place(); return true;
     case 'text': saveCfg({ text: stepped(opt, TEXT, cfg.text) }); toPage(windowState()); return true;
     case 'opacity': setOpacity(Number(opt)); return true;
-    case 'notice': consent.ask({ dir: __dirname, title: NOTICE_TITLE, mode: 'view', zoom }); return false;
+    case 'notice': consent.ask({ dir: __dirname, title: NOTICE_TITLE, mode: 'view', zoom, avoid: overlayRects }); return false;
     case 'quit': app.quit(); return false;
     default: return false;
   }
