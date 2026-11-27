@@ -68,7 +68,7 @@ const WIDTH_STRIP = 8;
 // the content-sized window had; fyb = its bottom edge once the content sits at the bottom
 // width 300 (1.8.0, user 2026-11-27): a new install shows 작성자 = 닉(코드), and at 258 the titles were cut
 // short; a saved width stays as it is. Double-click on the width bar = this width.
-const DEFAULTS = { width: 292 + WIDTH_STRIP, align: 'right', ...POS.right, valign: 'top', fyb: 0.9, show: 'always', opacity: 1, expanded: true, nickMode: 'code', tab: 'normal', role: 'all', scale: 100, text: 100, subs: 'tab', newAlert: false, lockShrink: false, v: 3,
+const DEFAULTS = { width: 292 + WIDTH_STRIP, align: 'right', ...POS.right, valign: 'top', fyb: 0.9, show: 'always', opacity: 1, expanded: true, nickMode: 'code', tab: 'normal', role: 'all', scale: 100, text: 100, subs: 'tab', newAlert: false, newSound: false, lockShrink: false, v: 3,
   // toasts (1.6.0, as in 주간 납품): pos = top | center | bottom of the game window, min = the least level shown
   toast: { on: true, pos: 'top', min: 'info' } };
 // 작성자 칸 (user 2026-11-27): off | nick | code = 닉(코드) - the id of a 반고닉, the IP prefix of a 유동
@@ -134,6 +134,7 @@ function loadCfg() {
   // 잠금 때 [그대로 | 작게 | 매우 작게]: false | true | 'tile' (true kept its 1.10.0 meaning); off unless turned on
   c.lockShrink = c.lockShrink === true || c.lockShrink === 'tile' ? c.lockShrink : false;
   c.newAlert = c.newAlert === true;                 // 새 망호 알림: off unless turned on
+  c.newSound = c.newSound === true;                 // 새 망호 소리: off unless turned on
   delete c.font;
   if (!SUB_MODES.includes(c.subs)) c.subs = 'tab';
   if (c.subs !== 'tab' && c.tab === 'sub') c.tab = 'normal';     // that tab is not there
@@ -311,16 +312,35 @@ function newPostToast(kind, list) {
 // user asked for these, so no 알림 등급 setting filters them out (they still expire, 8 s). While the game is
 // not on screen they go without an id, in one line: the toast window keeps them for its summary line when the
 // game is back (a toast with an id is never kept) - and one line is what that summary can quote.
+// 새 망호 소리 [끔 | 켬] (user 2026-11-27, 1.11.0; off for everyone until turned on): one short sound
+// (sounds/new-mangho.ogg, the page plays it) when a 새 망호 toast first appears - not when a toast still up
+// changes in place (one of its kind shown within NEW_TOAST_MS), not for what waited while the game was off
+// screen (that comes back as one summary - stale by then), at most once a NEW_SOUND_GAP_MS, once for both kinds.
+// Only with 새 망호 알림 on and toasts shown (notify says whether it was).
+const NEW_TOAST_MS = 8 * 1000;               // newPostToast's sec
+const NEW_SOUND_GAP_MS = 60 * 1000;
+const newShownUntil = { normal: 0, sub: 0 };
+let newSoundAt = -Infinity;
 function alertNew(snap, seen, subsWereHidden) {
   if (!cfg.newAlert) return;
-  const list = newRecruits(snap.posts, seen, { now: Date.now(), role: cfg.role,
+  const now = Date.now();
+  const list = newRecruits(snap.posts, seen, { now, role: cfg.role,
     blocked: (p) => !!(authors && authors.hidden(p)), noSub: cfg.subs === 'hide' || subsWereHidden });
   const onScreen = gameVisible();
+  let fresh = false;
   for (const kind of ['normal', 'sub']) {
     const posts = list.filter((p) => (p.kind || 'normal') === kind);
     if (!posts.length) continue;
     const t = newPostToast(kind, posts);
-    notify(onScreen ? { id: `new-${kind}`, ...t.two } : t.one);
+    const shown = notify(onScreen ? { id: `new-${kind}`, ...t.two } : t.one);
+    if (onScreen && shown) {
+      if (now >= newShownUntil[kind]) fresh = true;
+      newShownUntil[kind] = now + NEW_TOAST_MS;
+    }
+  }
+  if (fresh && cfg.newSound && now - newSoundAt >= NEW_SOUND_GAP_MS) {
+    newSoundAt = now;
+    toPage({ type: 'sound', name: 'new-mangho', gain: 0.7 });
   }
 }
 
@@ -817,6 +837,10 @@ function menuItems() {
     type: 'segment', id: 'newalert', label: '새 망호 알림', tip: '자동 스캔이 새로 찾은 모집 중인 글을 알림으로 띄웁니다',
     options: [['off', '끔'], ['on', '켬']].map(([id, label]) => ({ id, label, on: cfg.newAlert === (id === 'on') })),
   });
+  items.push({
+    type: 'segment', id: 'newsound', label: '새 망호 소리', tip: '새 망호 알림이 뜰 때 짧은 소리 · 1분에 한 번까지',
+    options: [['off', '끔'], ['on', '켬']].map(([id, label]) => ({ id, label, on: cfg.newSound === (id === 'on') })),
+  });
   items.push({ type: 'stepper', id: 'scale', label: '배율', value: cfg.scale, unit: '%', ...SCALE, tip: '목록·메뉴·말풍선 전체 크기' });
   items.push({ type: 'stepper', id: 'text', label: '글자', value: cfg.text, unit: '%', ...TEXT, tip: '목록·툴팁의 글자만' });
   items.push({
@@ -865,6 +889,7 @@ function menuAct(id, opt) {
     case 'show': setShow(opt); return opt !== 'hidden';
     case 'subs': setSubs(opt); return true;
     case 'newalert': saveCfg({ newAlert: opt === 'on' }); return true;
+    case 'newsound': saveCfg({ newSound: opt === 'on' }); return true;
     case 'nickmode': if (NICK_MODES.includes(opt)) { saveCfg({ nickMode: opt }); toPage(windowState()); } return true;
     // (the open menu keeps its size until it closes; the value changes in place)
     case 'scale': saveCfg({ scale: stepped(opt, SCALE, cfg.scale) }); place(); return true;
@@ -935,7 +960,9 @@ function createWindow() {
     focusable: false,          // never take keyboard focus away from the game
     skipTaskbar: true, alwaysOnTop: true, title: '망호 스캐너',
     icon: path.join(__dirname, 'icon.png'),
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
+    // 새 망호 소리 plays from this page with no click on it (the game has the mouse) - also while hidden
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true,
+      autoplayPolicy: 'no-user-gesture-required' },
   });
   win.setAlwaysOnTop(true, 'screen-saver');
   win.setIgnoreMouseEvents(true, { forward: true });

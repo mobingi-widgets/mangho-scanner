@@ -1,0 +1,11 @@
+new-mangho.ogg - 새 망호 알림 소리 (망호 스캐너)
+
+CC0 1.0(퍼블릭 도메인 기증) 녹음 두 개를 잘라 섞은 것입니다. 표기 의무는 없지만 출처를 남깁니다.
+https://creativecommons.org/publicdomain/zero/1.0/
+
+- 파도: transitking, "wavesound" - https://freesound.org/s/11505/ (CC0 1.0)
+  OpenGameArt "Water Waves"에 실린 단일 파도(wave_02)
+- 갈매기: Lydmakeren, "Seagulls_short.wav" - https://freesound.org/s/510917/ (CC0 1.0)
+  4.68~5.32초, 두 번 울음
+
+손질: 3초, 파도 페이드 인 0.4초 · 페이드 아웃 약 1.3초, 음량 -20 LUFS, 모노 Opus 48 kbps.

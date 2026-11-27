@@ -817,6 +817,21 @@ new ResizeObserver(() => {
 
 setInterval(tick, 1000);
 
+// 새 망호 소리 (1.11.0): main.js decides when (alertNew) and how loud; sounds/new-mangho.ogg (CC0 - sounds/LICENSE.txt).
+// One element, restarted for each play. window.__sound: the last try, for the tests.
+let sfx = null;
+window.__sound = null;
+function playSound(d) {
+  if (d.name !== 'new-mangho') return;
+  if (!sfx) sfx = new Audio('sounds/new-mangho.ogg');
+  sfx.volume = Math.max(0, Math.min(1, Number(d.gain) || 0.7));
+  sfx.currentTime = 0;
+  const at = Date.now();
+  window.__sound = { at, result: 'pending' };
+  sfx.play().then(() => { window.__sound = { at, result: 'playing' }; },
+    (e) => { window.__sound = { at, result: `failed: ${(e && e.name) || e}` }; });
+}
+
 window.mangho.onFeed((d) => {
   if (d.type === 'snapshot') {
     snap = d;
@@ -894,5 +909,7 @@ window.mangho.onFeed((d) => {
     drawPill();
   } else if (d.type === 'bars') {
     document.body.classList.toggle('bars', !!d.on);     // the size bars: only while the pointer is near
+  } else if (d.type === 'sound') {
+    playSound(d);
   }
 });
