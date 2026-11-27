@@ -53,7 +53,10 @@ const REF_GAME_HEIGHT = 680;     // DIP height the CSS sizes were set for; large
 // tracker (it reaches ~35% with five quests) and left of the column of context
 // buttons on the right edge (gather / ASSIST, ~80 DIP wide), so it never covers them.
 const POS = { left: { dx: 8, fy: 0.24 }, right: { dx: 88, fy: 0.37 } };
-const DEFAULTS = { width: 250, align: 'right', ...POS.right, show: 'always', opacity: 1, expanded: true, nickMode: 'off', tab: 'normal', role: 'all', font: 'mid', v: 1 };
+// width = the whole window: since 1.5.1 that includes the width bar's own 8px strip beside the
+// list (style.css), so the default and every saved width got 8 more - the list keeps its width
+const WIDTH_STRIP = 8;
+const DEFAULTS = { width: 250 + WIDTH_STRIP, align: 'right', ...POS.right, show: 'always', opacity: 1, expanded: true, nickMode: 'off', tab: 'normal', role: 'all', font: 'mid', v: 2 };
 // 작성자 칸 (user 2026-11-27): off | nick | code = 닉(식별코드) | dup = code only for a nick seen twice
 const NICK_MODES = ['off', 'nick', 'code', 'dup'];
 // 글자 작게/중간/크게 (user 2026-11-27): times the zoom that follows the game window's size;
@@ -84,6 +87,8 @@ function loadCfg() {
   // 1.4.0 and before: 작성자 닉 on/off -> 겹칠 때 (the nick, a code when it repeats) / 끔
   if (!saved.nickMode && 'nick' in saved) c.nickMode = saved.nick ? 'dup' : 'off';
   if (!NICK_MODES.includes(c.nickMode)) c.nickMode = 'off';
+  // 1.5.0 and before (v1): no strip for the width bar yet
+  if ((saved.v || 1) < 2 && typeof saved.width === 'number') c.width = saved.width + WIDTH_STRIP;
   if (!FONT_SCALE[c.font]) c.font = 'mid';
   delete c.nick;
   return c;
@@ -611,7 +616,7 @@ async function demoShots() {
   Object.assign(scan, { okAt: now - 12000, nextAt: now + 48000 });
   saveCfg({ role: 'deal' });
   await js("document.body.classList.add('demo')");
-  saveCfg({ width: DEFAULTS.width + 32 });           // the demo's padding (marks) comes on top of the usual width
+  saveCfg({ width: DEFAULTS.width + 24 });           // the demo's padding (marks) on top of the usual width, less the strip it holds
   place();
   const demoWindow = (extra) => toPage({ type: 'window', expanded: true, align: 'right', nickMode: 'off', tab: 'normal', role: 'deal',
     wside: 'left', width: cfg.width, defWidth: DEFAULTS.width, ...extra });
@@ -630,9 +635,9 @@ async function demoShots() {
   await js("window.__setTab('normal')");
   await wait(400);
   // 작성자 = 겹칠 때 on a wider overlay (the width bar), its live label showing
-  saveCfg({ width: 372 });
+  saveCfg({ width: 364 });
   place();
-  demoWindow({ nickMode: 'dup', width: 372 });
+  demoWindow({ nickMode: 'dup', width: 364 });
   toPage({ type: 'width', width: 340, live: true });
   await wait(700);
   await js("document.body.classList.add('wsizing')");
@@ -641,7 +646,7 @@ async function demoShots() {
   await js("document.body.classList.remove('wsizing')");
   toPage({ type: 'width', width: 340, live: false });
   // 글자 크게 (x1.2): the whole overlay grows with it
-  saveCfg({ width: DEFAULTS.width + 32, font: 'large' });
+  saveCfg({ width: DEFAULTS.width + 24, font: 'large' });
   place();
   demoWindow();
   await wait(700);
