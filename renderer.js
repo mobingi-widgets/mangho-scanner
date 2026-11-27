@@ -302,6 +302,24 @@ function updateTabs(now) {
 
 // --------------------------------------------------------------------- list
 
+// the empty picture (index.html #empty-tab: the kind's icon broken in two over water). prefix: its ids
+// (and what refers to them) renamed - the tile's copy must not lean on the list's, which may be hidden
+function emptyPicture(kind, text, prefix) {
+  const frag = $('empty-tab').content.cloneNode(true);
+  if (prefix) {
+    for (const e of frag.querySelectorAll('[id]')) e.id = prefix + e.id;
+    for (const e of frag.querySelectorAll('[href], [clip-path], [fill]')) {
+      for (const a of ['href', 'clip-path', 'fill']) {
+        const v = e.getAttribute(a);
+        if (v && v.includes('#empty-tab')) e.setAttribute(a, v.replace(/#empty-tab/g, `#${prefix}empty-tab`));
+      }
+    }
+  }
+  frag.getElementById(`${prefix}empty-tab-symbol`).append(...svgIcon(kind).children);
+  frag.querySelector('span').textContent = text;
+  return frag;
+}
+
 function draw() {
   const list = $('list');
   popFor(null);                          // its spot is about to go
@@ -313,10 +331,7 @@ function draw() {
   }
   const posts = postsOf(tab);
   if (!posts.length) {
-    const empty = $('empty-tab').content.cloneNode(true);
-    empty.getElementById('empty-tab-symbol').append(...svgIcon(tab).children);
-    empty.querySelector('span').textContent = `${KIND[tab]} 없음..`;
-    list.append(empty);
+    list.append(emptyPicture(tab, `${KIND[tab]} 없음..`, ''));
   } else {
     const head = el('div', 'cols');
     head.append(el('span', 'ttl', '제목'), el('span', 'nick', '작성자'), el('span', 'age', '시간'));
@@ -365,7 +380,63 @@ function tick() {
   }
   updateTabs(now);
   updateRoleChip();
+  drawTile(now);
 }
+
+// --------------------------------------------------------------------- tile
+// 잠금 때 매우 작게 (user 2026-11-27, 1.10.0 - the designer's 시안 B): while locked, main.js shows only this
+// (body.tile; the window is the tile, at the docked corner). The newest 모집 중 post of both kinds - also
+// with 따로 표시, never a 잠망호 while hidden; 모집 중 = what the tabs count (stateOf: not 차단, 출항, 20분
+// 지남 or 직군 다름). Its kind big in a ring that runs down over those 20 minutes (the age colour), '외 N'
+// = how many more, the 🔒 on the ring when it has a password, the title in two lines (…), its age. Every
+// second (tick): the ring and the age move, a post past 20 minutes gives way to the next or to the empty
+// picture, a newer post takes the place. Empty, the tile stays: the scanner is seen to be alive.
+function tilePick(now) {
+  if (!snap) return null;
+  const open = snap.posts.filter((p) => !(subs === 'hide' && p.kind === 'sub') && stateOf(p, now) === 'open')
+    .sort((a, b) => (b.t || 0) - (a.t || 0));
+  return { post: open[0] || null, count: open.length };
+}
+const tiling = () => document.body.classList.contains('tile');
+let tileKey = '';
+function drawTile(now = Date.now()) {
+  if (!tiling()) { tileKey = ''; return; }
+  const box = $('tile').querySelector('.tc');
+  const pick = tilePick(now);
+  const p = pick && pick.post;
+  const key = !pick ? 'wait' : p ? JSON.stringify([p.no, p.title, p.kind || 'normal', !!p.pw]) : 'none';
+  if (key !== tileKey) {
+    tileKey = key;
+    box.className = `tc${p ? '' : ' none'}`;
+    if (!pick) box.replaceChildren(el('div', 'empty', '읽는 중…'));
+    else if (!p) box.replaceChildren(emptyPicture('normal', '망호 없음..', 'tile-'));
+    else {
+      const ring = el('div', 'ring');
+      const rg = document.createElementNS(NS, 'svg');
+      rg.setAttribute('class', 'rg');
+      rg.setAttribute('viewBox', '0 0 56 56');
+      for (const cls of ['trk', 'arc']) {
+        const c = document.createElementNS(NS, 'circle');
+        for (const [a, v] of [['class', cls], ['cx', 28], ['cy', 28], ['r', 25]]) c.setAttribute(a, v);
+        if (cls === 'arc') c.setAttribute('pathLength', '100');
+        rg.append(c);
+      }
+      ring.append(rg, svgIcon(p.kind || 'normal'));
+      if (p.pw) { const b = el('span', 'pwb'); b.append(lockIcon()); ring.append(b); }
+      box.replaceChildren(el('span', 'more num'), ring, el('div', 't2', p.title), el('div', 'tm num'));
+    }
+  }
+  if (!p) return;
+  // what moves: the ring (the share of the 20 minutes left), the age colour and text, 외 N
+  const ms = p.t ? now - p.t : null;
+  const left = ms == null ? 100 : Math.max(0, Math.min(100, ((STALE_MS - ms) / STALE_MS) * 100));
+  box.querySelector('.arc').setAttribute('stroke-dasharray', `${left.toFixed(2)} 100`);
+  const cls = ms == null ? '' : ageClass(ms);
+  for (const c of ['a5', 'a10']) box.classList.toggle(c, c === cls);
+  box.querySelector('.tm').textContent = ms == null ? '?' : `${ageText(ms)} 전`;
+  box.querySelector('.more').textContent = pick.count > 1 ? `외 ${pick.count - 1}` : '';
+}
+window.__tilePick = (now) => { const r = tilePick(now || Date.now()); return r && { no: r.post ? r.post.no : null, count: r.count }; };   // tests
 
 // 내 직군 chip, first in the header: the full word (모두 · 힐러 · 탱커 · 딜러) when the header has
 // room for it, else one letter - it never makes the header wrap. Decided within one frame (no
@@ -712,6 +783,7 @@ for (const [bar, edge, cls] of [[wsizer, 'free', 'wsizing'], [$('wsizer2'), 'anc
   bar.addEventListener('dblclick', () => { if (!blocked() || blockUntil === wsizerBlock) window.mangho.ui('width-reset'); });
 }
 new ResizeObserver(() => {
+  if (tiling()) return;                  // hidden behind the tile: its size says nothing (main.js sizes the tile)
   fitList();
   fitHead();
   placeBubble();
@@ -744,6 +816,8 @@ window.mangho.onFeed((d) => {
     if (d.subs && d.subs !== subs) setSubs(d.subs);
     if (d.tab && d.tab !== tab) showTab(d.tab);
     if (d.role && d.role !== role) setRole(d.role);
+    // 잠금 때 매우 작게: the tile in place of everything else while locked
+    if (!!d.tile !== tiling()) { document.body.classList.toggle('tile', !!d.tile); drawTile(); }
   } else if (d.type === 'width') {
     // the side bar is being dragged: a live label; gone when let go
     const lab = $('wlabel');

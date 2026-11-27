@@ -131,7 +131,8 @@ function loadCfg() {
   if (saved.scale == null && saved.font) c.scale = FONT_TO_SCALE[saved.font] || 100;    // 1.8.x 글자 -> 배율
   c.scale = stepped(c.scale, SCALE, 100);
   c.text = stepped(c.text, TEXT, 100);
-  c.lockShrink = c.lockShrink === true;              // 잠금 때 작게: off unless turned on
+  // 잠금 때 [그대로 | 작게 | 매우 작게]: false | true | 'tile' (true kept its 1.10.0 meaning); off unless turned on
+  c.lockShrink = c.lockShrink === true || c.lockShrink === 'tile' ? c.lockShrink : false;
   c.newAlert = c.newAlert === true;                 // 새 망호 알림: off unless turned on
   delete c.font;
   if (!SUB_MODES.includes(c.subs)) c.subs = 'tab';
@@ -594,13 +595,27 @@ function overlayRects() {
   return out;
 }
 
-// 잠금 때 [그대로 | 작게] (user 2026-11-27, 1.10.0): while locked, the overlay at the smallest 배율 and 글자 - an
+// 잠금 때 [그대로 | 작게 | 매우 작게] (user 2026-11-27, 1.10.0) - 작게: while locked, the overlay at the smallest 배율 and 글자 - an
 // override only: cfg.scale / cfg.text keep the user's values (on disk, in the menus, the tray's lists), so a
 // quit while locked comes back at them. Already at the smallest: nothing changes. The 🔓 shows on the
 // full-size list (lock.shrunk() is off from the unlock on).
-const shrunk = () => !!(cfg.lockShrink && lock && lock.shrunk() && !appMode);
+const shrunk = () => !!(cfg.lockShrink === true && lock && lock.shrunk() && !appMode);
 const effScale = () => (shrunk() ? Math.min(cfg.scale, SCALE.min) : cfg.scale);
 const effText = () => (shrunk() ? Math.min(cfg.text, TEXT.min) : cfg.text);
+// 매우 작게 (user 2026-11-27, 1.10.0 - the designer's 시안 B): while locked the window is a TILE-px square at
+// the area's docked corner showing only the newest 모집 중 post (renderer.js drawTile) - at the user's own
+// 배율 and 글자 (the tile is small already; at 70 % its text would not read). The same override-only rule:
+// nothing written, back to the full list at the unlock.
+const TILE = 120;
+const tiled = () => !!(cfg.lockShrink === 'tile' && lock && lock.shrunk() && !appMode);
+// -> the tile's window bounds (DIP) in the window's area r = { x, y, w, h } at zoom z: its corner on the
+// content's docked corner (the content sits 2 CSS px inside the area's top - or bottom, body.up - edge:
+// #root's padding)
+function tileRect(r, z, right, up) {
+  const t = Math.round(TILE * z);
+  const pad = Math.round(2 * z);
+  return { x: right ? r.x + r.w - t : r.x, y: up ? r.y + r.h - t - pad : r.y + pad, width: t, height: t };
+}
 
 function place() {
   if (!win || win.isDestroyed() || isDragging()) return;
@@ -636,7 +651,8 @@ function place() {
     x = a.x + a.width - w - 16;
     y = a.y + 80;
   }
-  win.setBounds({ x, y, width: w, height: h });
+  if (tiled()) win.setBounds(tileRect({ x, y, w, h }, zoom, !g || cfg.align !== 'left', !!g && cfg.valign === 'bottom'));
+  else win.setBounds({ x, y, width: w, height: h });
   updateVisibility();
   // where this overlay is, for the other overlays' docking (none while it is a plain window or hidden)
   if (dock) dock.publish(!appMode && win.isVisible() ? win.getBounds() : null);
@@ -698,7 +714,7 @@ function onDrop(r) {
 function windowState() {
   // the width bar sits on the edge away from the anchored side (in a plain window: the right)
   return { type: 'window', expanded: !!cfg.expanded, align: cfg.align, nickMode: cfg.nickMode, tab: cfg.tab, role: cfg.role, subs: cfg.subs, text: effText(),
-    wside: widthSide(), width: cfg.width, defWidth: DEFAULTS.width, valign: appMode ? 'top' : cfg.valign, wboth: anchoredFree() };
+    wside: widthSide(), width: cfg.width, defWidth: DEFAULTS.width, valign: appMode ? 'top' : cfg.valign, wboth: anchoredFree(), tile: tiled() };
 }
 
 // ------------------------------------------------------------ window tracker
@@ -795,8 +811,8 @@ function menuItems() {
   items.push({ type: 'stepper', id: 'scale', label: '배율', value: cfg.scale, unit: '%', ...SCALE, tip: '목록·메뉴·말풍선 전체 크기' });
   items.push({ type: 'stepper', id: 'text', label: '글자', value: cfg.text, unit: '%', ...TEXT, tip: '목록·툴팁의 글자만' });
   items.push({
-    type: 'segment', id: 'lockshrink', label: '잠금 때', tip: '작게: 잠긴 동안 배율·글자를 가장 작게 줄입니다',
-    options: [['off', '그대로'], ['on', '작게']].map(([id, label]) => ({ id, label, on: !!cfg.lockShrink === (id === 'on') })),
+    type: 'segment', id: 'lockshrink', label: '잠금 때', tip: '잠긴 동안 — 작게: 배율·글자를 가장 작게 · 매우 작게: 가장 새 모집 중 글 하나만',
+    options: [['off', '그대로', false], ['on', '작게', true], ['tile', '매우 작게', 'tile']].map(([id, label, v]) => ({ id, label, on: cfg.lockShrink === v })),
   });
   items.push({
     type: 'segment', id: 'opacity', label: '투명도',
@@ -844,7 +860,7 @@ function menuAct(id, opt) {
     // (the open menu keeps its size until it closes; the value changes in place)
     case 'scale': saveCfg({ scale: stepped(opt, SCALE, cfg.scale) }); place(); return true;
     case 'text': saveCfg({ text: stepped(opt, TEXT, cfg.text) }); toPage(windowState()); return true;
-    case 'lockshrink': saveCfg({ lockShrink: opt === 'on' }); place(); toPage(windowState()); return true;
+    case 'lockshrink': saveCfg({ lockShrink: opt === 'on' ? true : opt === 'tile' ? 'tile' : false }); place(); toPage(windowState()); return true;
     case 'opacity': setOpacity(Number(opt)); return true;
     case 'notice': consent.ask({ dir: __dirname, title: NOTICE_TITLE, mode: 'view', zoom: baseZoom, avoid: overlayRects }); return false;
     case 'quit': app.quit(); return false;
@@ -1317,7 +1333,7 @@ if (!app.requestSingleInstanceLock()) {
       appMode: () => appMode,
       blocked: () => !!(ctx && ctx.isOpen()) || isDragging() || sizing
         || !!(authorsUi && ((authorsUi.window() && authorsUi.window().isVisible()) || authorsUi.card())),
-      onState: () => { if (cfg.lockShrink) { place(); toPage(windowState()); } },   // 잠금 때 작게
+      onState: () => { if (cfg.lockShrink) { place(); toPage(windowState()); } },   // 잠금 때 작게 / 매우 작게
       opacity: () => cfg.opacity || 1, side: () => (cfg.align === 'left' ? 'left' : 'right'),
     });
     // click-through from the cursor position (hitpoll.js) - not from forwarded mouse moves, which
