@@ -204,8 +204,68 @@ function postModel(p) {
   const lines = [];
   if (p.departed && p.departed.by === 'comment') lines.push(`작성자: ${said(p.departed)}`);
   else if (p.authorLast) lines.push(`작성자 최근 댓글 ${cmtTime(p.authorLast.at)}: ${said(p.authorLast)}`);
-  return { title: p.title, sub: `#${p.no}`, rows, lines, note: '클릭: 글 열기' };
+  return { title: p.title, sub: `#${p.no}`, rows, lines, note: '클릭: 글 열기 · 우클릭: 메뉴' };
 }
+
+// ------------------------------------------------------------------- copying
+// 망호 글 복사 (user 2026-11-27, 1단계): a click on the 🔒 copies the party password, on the author
+// cell the writer (main.js writerCopy decides what - the nick; 2단계 a memo first). main.js writes
+// the clipboard and says it in a toast; the spot answers at once - the padlock is a ✓ for a moment,
+// the nick brightens (all there is with toasts off).
+function copy(p, what, spot) {
+  window.mangho.ui('copy', { no: p.no, what });
+  if (what === 'pw' && !(p.pw && p.pw.value)) return;     // 귓속말로 받기: nothing copied
+  spot.classList.add('copied');
+  setTimeout(() => spot.classList.remove('copied'), what === 'pw' ? 1200 : 800);
+}
+// the padlock with room around it to press (style.css .lockb - it looks the same)
+function lockButton(p) {
+  const b = el('span', 'lockb');
+  b.append(lockIcon());
+  b.addEventListener('click', (e) => { e.stopPropagation(); if (!blocked()) copy(p, 'pw', b); });
+  return b;
+}
+
+// Over the 🔒 or the author cell (user 2026-11-27): a small bubble with what a click copies - the
+// password alone, or the whole writer (the nick the column cuts with …, its code, its kind) - in
+// place of the line's tooltip. It never takes the mouse (pointer-events: none): the click-through
+// rects stay as they were. Above the spot, below when there is no room.
+const pop = el('div', 'pop');
+pop.hidden = true;
+document.body.append(pop);
+let popAt = null;
+function popModel(spot) {
+  const p = spot.closest('.post').post;
+  if (spot.classList.contains('lockb')) {
+    return p.pw && p.pw.value ? { text: p.pw.value, note: '클릭: 복사', cls: 'pw' } : { text: '귓속말로 받기', note: '', cls: 'pw' };
+  }
+  const code = codeOf(p, false);
+  // 2단계: the user's memo on this writer (main.js fills p.memo, '' = none) - a click then copies the
+  // memo (main.js writerCopy decides the same way)
+  return { text: `${p.nick}${code ? `(${code})` : ''} · ${writerKind(p)[1]}`, memo: p.memo || '',
+    note: p.memo ? '클릭: 메모 복사' : '클릭: 닉네임 복사', cls: '' };
+}
+function popFor(spot) {
+  if (spot === popAt) return;
+  popAt = spot && spot.closest('.post') ? spot : null;
+  if (!popAt) { pop.hidden = true; return; }
+  const m = popModel(popAt);
+  pop.className = `pop ${m.cls}`;
+  pop.replaceChildren(el('div', 'pt', m.text), ...(m.memo ? [el('div', 'pm', m.memo)] : []), ...(m.note ? [el('div', 'pn', m.note)] : []));
+  pop.hidden = false;
+  const r = popAt.getBoundingClientRect();
+  const W = document.documentElement.clientWidth;
+  const w = pop.offsetWidth;
+  const h = pop.offsetHeight;
+  const below = r.top - 7 - h < 0;
+  const left = Math.max(4, Math.min(r.left + r.width / 2 - w / 2, W - w - 4));
+  pop.classList.toggle('below', below);
+  pop.style.left = `${Math.round(left)}px`;
+  pop.style.top = `${Math.round(below ? r.bottom + 7 : r.top - 7 - h)}px`;
+  pop.style.setProperty('--cx', `${Math.round(Math.max(8, Math.min(r.left + r.width / 2 - left, w - 8)))}px`);
+}
+document.addEventListener('scroll', () => popFor(null), true);
+window.__popTest = (sel) => { popFor(document.querySelector(sel)); return !pop.hidden; };   // screenshot check
 
 function tabModel(kind, c) {
   if (!snap) return { lines: ['아직 스캔 전'] };
@@ -238,6 +298,7 @@ function updateTabs(now) {
 
 function draw() {
   const list = $('list');
+  popFor(null);                          // its spot is about to go
   list.replaceChildren();
   if (!snap) {
     list.append(el('div', 'empty', '읽는 중…'));
@@ -258,10 +319,20 @@ function draw() {
       const row = el('div', 'post hit tipm' + (p.departed ? ` gone by-${p.departed.by}` : ''));
       const ttl = el('span', 'ttl');
       ttl.append(svgIcon(p.kind || 'normal'), el('span', 'tt', p.title));
-      if (p.pw) ttl.append(lockIcon());
-      row.append(ttl, nickCell(p, nickMode === 'code'), el('span', 'age num', ''));
+      if (p.pw) ttl.append(lockButton(p));
+      const nick = nickCell(p, nickMode === 'code');
+      nick.addEventListener('click', (e) => { e.stopPropagation(); if (!blocked()) copy(p, 'writer', nick); });
+      row.append(ttl, nick, el('span', 'age num', ''));
       row.post = p;
       row.addEventListener('click', () => { if (!blocked()) window.mangho.ui('open', p.no); });
+      // right-click: the line's menu (main.js postMenuItems - copy the writer / the password, open)
+      row.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        if (blocked()) return;
+        tipFor(null);
+        popFor(null);
+        window.mangho.ui('post-menu', p.no);
+      });
       list.append(row);
     }
   }
@@ -358,7 +429,10 @@ function setHover(on) {
 }
 document.addEventListener('mousemove', (e) => {
   setHover(!!e.target.closest('.hit, #panel'));
-  tipFor(e.target.closest('.tipm'));
+  // over the 🔒 or the author cell: the copy bubble instead of the line's tooltip
+  const spot = e.target.closest('.lockb, .post .nick');
+  popFor(spot);
+  tipFor(spot ? null : e.target.closest('.tipm'));
 });
 // what takes the mouse, for main.js (hitpoll.js decides click-through from the cursor; mouse
 // moves do not reach a click-through window while the game, run as administrator, is in front)
@@ -367,7 +441,7 @@ window.watchHitRects('.hit, #panel', (list) => window.mangho.ui('hits', list), '
 window.watchHitRects('.head .pill, #updpill, #panel, #sizer, #wsizer, #wsizer2', (list) => window.mangho.ui('near', list), { inert: true });
 // the whole area (over the game): once near, the bars stay while the pointer is anywhere in it
 window.watchHitRects('#area', (list) => window.mangho.ui('keep', list), { inert: true });
-window.addEventListener('mouseout', (e) => { if (!e.relatedTarget) { setHover(false); tipFor(null); } });
+window.addEventListener('mouseout', (e) => { if (!e.relatedTarget) { setHover(false); tipFor(null); popFor(null); } });
 
 // ---------------------------------------------------------------- tooltips
 let tipEl = null;
@@ -681,6 +755,7 @@ window.mangho.onFeed((d) => {
     placeBubble();
   } else if (d.type === 'hover-reset') {
     hovering = false;
+    popFor(null);                        // the pointer left what takes the mouse: no mouseout comes
   } else if (d.type === 'problems') {
     setProblems(d.list || []);
   } else if (d.type === 'movemode') {
@@ -708,6 +783,7 @@ window.mangho.onFeed((d) => {
   } else if (d.type === 'menu') {
     blockUntil = d.open ? Infinity : Date.now() + 300;
     menuOpen = !!d.open;
+    if (menuOpen) popFor(null);
     drawPill();
   } else if (d.type === 'bars') {
     document.body.classList.toggle('bars', !!d.on);     // the size bars: only while the pointer is near

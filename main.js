@@ -10,7 +10,7 @@
 // - No game window for 3 s -> an ordinary window (window-app mode) until it is back.
 // The game itself is never touched: the window tracker (gamewin.ps1) only asks
 // Windows where the game's window is.
-const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, shell, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -245,6 +245,52 @@ const gameVisible = () => !!game.found && !game.minimized;
 // -> shown or kept for later; false = toasts are off or below the chosen level
 function notify(m) {
   return toast ? toast.notify(m) : false;
+}
+
+// ------------------------------------------------------------------- copying
+// 망호 글 복사 (user 2026-11-27, 1단계): a click on the author cell copies the writer, on the 🔒 the
+// party password; a right-click on a line offers the same in a menu. The clipboard is written here
+// - the page only says which post (its number, from the last scan) and what.
+const postByNo = (no) => (scan.last ? scan.last.posts.find((x) => x.no === Number(no)) : null);
+// what the writer copies - the one place that decides (2단계: the user's memo first, then the nick)
+function writerCopy(p) {
+  return { what: '닉네임', text: p.nick };
+}
+// -> { text ('' = nothing to copy), say }
+function copyOf(p, what) {
+  if (what === 'pw') {
+    if (p.pw && p.pw.value) return { text: p.pw.value, say: '암호 복사함' };
+    return { text: '', say: p.pw ? '암호는 귓속말로 받습니다' : '암호 없음' };
+  }
+  const w = writerCopy(p);
+  return { text: w.text, say: `${w.what} 복사함 · ${w.text}` };
+}
+function copyPost(no, what) {
+  const p = postByNo(no);
+  if (!p) return;
+  const c = copyOf(p, what);
+  // the demo leaves the user's clipboard alone: what it would copy goes to a file (checked, not shown)
+  if (c.text && DEMO) fs.appendFileSync(path.join(DEMO, 'copied.txt'), `${what}\t${c.text}\n`);
+  else if (c.text) clipboard.writeText(c.text);
+  // with toasts off a copy shows only on the page (✓ on the padlock, a brighter nick); nothing to
+  // copy has no such mark, so that goes to the bubble under the ☰
+  if (!notify({ id: 'copy', text: c.say, level: 'info', sec: 2, by: '스캐너' }) && !c.text) {
+    toPage({ type: 'update-toast', text: c.say, level: 'info', sec: 3 });
+  }
+}
+// a line's right-click menu - items as data: 2단계 (메모 복사 · 차단 · 메모 쓰기/고치기) adds its lines here
+function postMenuItems(p) {
+  const w = writerCopy(p);
+  const items = [{ type: 'item', id: 'copy-writer', label: `${w.what} 복사하기 · ${w.text}` }];
+  if (p.pw && p.pw.value) items.push({ type: 'item', id: 'copy-pw', label: '암호 복사하기' });
+  items.push({ type: 'sep' }, { type: 'item', id: 'open', label: '글 열기' });
+  return items;
+}
+function postMenuAct(p, id) {
+  if (id === 'copy-writer') copyPost(p.no, 'writer');
+  else if (id === 'copy-pw') copyPost(p.no, 'pw');
+  else if (id === 'open') shell.openExternal(p.url);
+  return false;
 }
 
 // ----------------------------------------------------------------- tooltips
@@ -663,6 +709,17 @@ function popupMenu() {
   openMenu(menuItems, menuAct);
 }
 
+// 내 직군 badge: one line of choices in the same menu as ☰
+function roleMenuItems() {
+  return [
+    { type: 'title', label: '내 직군' },
+    {
+      type: 'segment', id: 'role', label: '직군', tip: '설정한 직군과 일치하지 않는 게시글을 흐리게 표시합니다',
+      options: ['all', 'heal', 'tank', 'deal'].map((r) => ({ id: r, label: ROLE_NAME[r], on: (cfg.role || 'all') === r })),
+    },
+  ];
+}
+
 function setShow(v) {
   const wasHidden = cfg.show === 'hidden';
   if (v === 'hidden' && !wasHidden) saveCfg({ showBefore: cfg.show });   // the tray click goes back to it
@@ -738,15 +795,13 @@ async function demoShots() {
     return false;
   };
   const save = async (w, name) => {
+    // a hidden window never answers capturePage: the run would hang there
+    if (!w.isVisible()) { console.warn(`demo: ${name} - window hidden, not captured`); return; }
     if (!await settled(w)) console.warn(`demo: ${name} - not drawn or still resizing after 3 s`);
     fs.writeFileSync(path.join(DEMO, `${name}.png`), (await w.webContents.capturePage()).toPNG());
   };
-  // the real pointer may rest where a menu opens: its hover and hint line are not part of the picture
-  const unhover = async (w) => {
-    await w.webContents.insertCSS('* { pointer-events: none !important; }');
-    w.webContents.sendInputEvent({ type: 'mouseMove', x: 1, y: 1 });
-    await w.webContents.executeJavaScript("hoverKey = null; document.getElementById('hint').textContent = '';").catch(() => {});
-  };
+  // a menu as it would open at this zoom, drawn offscreen (no pointer, so no hover in it either)
+  const saveMenu = async (items, name) => fs.writeFileSync(path.join(DEMO, `${name}.png`), await ctxLib.shot({ dir: __dirname, items, zoom }));
   const js = (code) => win.webContents.executeJavaScript(code);
   // start once the page has loaded (its feed handler listens): a message sent before that is lost,
   // and one overview came out '읽는 중…' (2026-11-27)
@@ -825,20 +880,35 @@ async function demoShots() {
   if (await js("window.__tipTest('.post:has(.lock):not(.rolex):not(.gone)')")) { await wait(700); await save(tipWin, 'tooltip-pw'); }
   tipAnchor = null;
   placeTip();
-  // the menu as it nearly always is: the update check has run (v… 최신)
+  // the menus, drawn offscreen (ctxmenu.shot): no menu at the pointer and no click catcher over the
+  // user's screen (user 2026-11-27). The ☰ menu as it nearly always is: the update check has run (v… 최신)
   Object.assign(uui.state(), { info: { available: false }, at: Date.now() - 12 * 60000, error: '' });
-  popupMenu();
-  await wait(1200);
-  await unhover(ctx.window());
-  await save(ctx.window(), 'menu');
-  ctx.close();
+  await saveMenu(menuItems(), 'menu');
+  await saveMenu(roleMenuItems(), 'menu-role');
+  // 복사 (review shots, not in the README; what would be copied goes to copied.txt): a line's
+  // right-click menu, then what its '암호 복사하기' does
+  const pwPost = scan.last.posts.find((p) => p.pw && p.pw.value);
+  await saveMenu(postMenuItems(pwPost), 'menu-post');
+  postMenuAct(pwPost, 'copy-pw');
+  await wait(2300);                                    // that toast goes
+  // the bubbles over the 🔒 and the author cell (작성자 = 닉(코드)), then a press on each
+  demoWindow({ nickMode: 'code' });
+  await wait(500);
+  const lockSel = `.post:has(.lockb):not(.gone) .lockb`;
+  if (await js(`window.__popTest(${JSON.stringify(lockSel)})`)) await save(win, 'pop-pw');
+  if (await js("window.__popTest('.post:nth-of-type(3) .nick')")) await save(win, 'pop-nick');
+  await js('window.__popTest(null)');
+  await js(`document.querySelector(${JSON.stringify(lockSel)}).click()`);
+  await wait(400);
+  await save(win, 'lock-done');
+  await save(toast.window(), 'toast-copy-pw');
+  await wait(1300);
+  await js("document.querySelector('.post:nth-of-type(3) .nick').click()");
+  await wait(400);
+  await save(toast.window(), 'toast-copy-nick');
+  await wait(2300);
+  demoWindow();
   await wait(300);
-  win.webContents.send('feed', { type: 'menu', open: false });
-  ipcMain.emit('ui', { sender: win.webContents }, 'role-menu');
-  await wait(800);
-  await unhover(ctx.window());
-  await save(ctx.window(), 'menu-role');
-  ctx.close();
   // 지금 스캔: one toast, progress then the result (review shots, not in the README)
   notify({ id: 'scan-now', text: '스캔 중…', level: 'info', sec: 30, by: '스캐너' });
   await wait(900);
@@ -867,6 +937,7 @@ async function demoShots() {
   for (const f of fs.readdirSync(DEMO)) {             // keep the steps the README shows
     if (f.startsWith('update-') && !['update-available.png', 'update-downloading.png', 'update-pill.png'].includes(f)) fs.rmSync(path.join(DEMO, f));
   }
+  if (ctx) console.warn('demo: a real menu (and its click catcher) was opened');
   process.env.NOTICE_SHOT = path.join(DEMO, 'notice.png');
   await consent.ask({ dir: __dirname, title: NOTICE_TITLE });
   app.quit();
@@ -1017,18 +1088,17 @@ ipcMain.on('ui', (_e, action, arg) => {
     saveCfg({ maxH: arg == null ? null : Math.max(80, Math.round(Number(arg) || 0)) });
     place();
   } else if (action === 'role-menu') {
-    // 내 직군 badge: one line of choices in the same menu as ☰
-    openMenu(() => [
-      { type: 'title', label: '내 직군' },
-      {
-        type: 'segment', id: 'role', label: '직군', tip: '설정한 직군과 일치하지 않는 게시글을 흐리게 표시합니다',
-        options: ['all', 'heal', 'tank', 'deal'].map((r) => ({ id: r, label: ROLE_NAME[r], on: (cfg.role || 'all') === r })),
-      },
-    ], (id, r) => { if (id === 'role') { saveCfg({ role: r }); toPage(windowState()); } return false; });
+    openMenu(roleMenuItems, (id, r) => { if (id === 'role') { saveCfg({ role: r }); toPage(windowState()); } return false; });
   } else if (action === 'open') {
     // only a post from the last scan, by number - the page never hands over a URL
-    const p = scan.last && scan.last.posts.find((x) => x.no === Number(arg));
+    const p = postByNo(arg);
     if (p) shell.openExternal(p.url);
+  } else if (action === 'copy') {
+    if (arg && (arg.what === 'pw' || arg.what === 'writer')) copyPost(arg.no, arg.what);
+  } else if (action === 'post-menu') {
+    // a line's right-click: built from the newest scan while open (the post may have changed)
+    const p = postByNo(arg);
+    if (p) openMenu(() => postMenuItems(postByNo(p.no) || p), (id) => postMenuAct(postByNo(p.no) || p, id));
   } else if (action === 'update-open') {
     if (uui) uui.show();                // the overlay's "새로운 업데이트가 있습니다!" pill
   } else if (action === 'open-list') {
