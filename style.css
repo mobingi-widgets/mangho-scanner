@@ -309,14 +309,15 @@ body.app #wsizer { top: 23px; bottom: 15px; }
 
 /* 잠금 때 매우 작게 (1.10.0, the designer's 시안 B - renderer.js drawTile): while locked the window is this
    tile (main.js: 120 px x 배율 at the docked corner) and the rest of the page is hidden. The kind in a
-   ring that runs down over the 20 minutes a post stays 모집 중, in the age colour · 외 N · the 🔒 on the
-   ring · the title in two lines · the age. 글자 % only as far as two lines still fit (--tt, 110 %). */
+   ring that runs down over the 20 minutes a post stays 모집 중, in the age colour · N+ (how many more) and the
+   🔒 on the ring · the title in two lines · the age. 글자 % only as far as two lines still fit (--tt, 110 %).
+   No card (user 2026-11-28, "B"): the big 잠금 hint's soft ellipse (lock.css --lock-hint-bg), no edge. */
 #tile { display: none; }
 body.tile #root, body.tile #area { display: none; }
 body.tile #tile {
   --tt: min(var(--text), 1.1);
   position: fixed; inset: 0; display: block; overflow: hidden; color: var(--white);
-  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  background: var(--lock-hint-bg); border: 0; border-radius: 0;
   text-shadow: -1px -1px 0 rgba(0,0,0,.75), 1px -1px 0 rgba(0,0,0,.75), -1px 1px 0 rgba(0,0,0,.75),
                1px 1px 0 rgba(0,0,0,.75), 0 0 4px rgba(0,0,0,.6);
 }
@@ -335,7 +336,11 @@ body.tile #tile {
 #tile .t2 { margin-top: 5px; width: 100%; text-align: center; font-size: calc(var(--tt) * 11.5px); line-height: calc(var(--tt) * 15px);
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; word-break: keep-all; overflow-wrap: anywhere; }
 #tile .tm { margin-top: auto; font-size: calc(var(--tt) * 10.5px); line-height: calc(var(--tt) * 14px); white-space: nowrap; }
-#tile .more { position: absolute; left: 7px; top: 5px; font-size: calc(var(--tt) * 9.5px); line-height: 1.4; color: var(--soft); }
+/* N+ (how many more 모집 중): a badge on the ring's bottom-right, the 🔒 badge's family (it stays top-right) */
+#tile .more { position: absolute; right: -9px; bottom: -3px; min-width: 19px; height: 17px; padding: 0 4px; border-radius: 9px;
+  background: rgba(16,19,25,.94); box-shadow: 0 0 0 1px var(--line); color: var(--white);
+  display: flex; align-items: center; justify-content: center; font-size: 10px; line-height: 1; white-space: nowrap; }
+#tile .more:empty { display: none; }
 #tile .empty-state { padding: 0; gap: 3px; font-size: calc(var(--tt) * 11px); line-height: calc(var(--tt) * 15px); }
 #tile .empty-state svg { width: 100px; }
 #tile .empty { padding: 0; }

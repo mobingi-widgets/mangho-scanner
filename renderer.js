@@ -442,8 +442,10 @@ function tick() {
 // 잠금 때 매우 작게 (user 2026-11-27, 1.10.0 - the designer's 시안 B): while locked, main.js shows only this
 // (body.tile; the window is the tile, at the docked corner). The newest 모집 중 post of both kinds - also
 // with 따로 표시, never a 잠망호 while hidden; 모집 중 = what the tabs count (stateOf: not 차단, 출항, 20분
-// 지남 or 직군 다름). Its kind big in a ring that runs down over those 20 minutes (the age colour), '외 N'
-// = how many more, the 🔒 on the ring when it has a password, the title in two lines (…), its age. Every
+// 지남 or 직군 다름). Its kind big in a ring that runs down over those 20 minutes (the age colour), 'N+' on
+// the ring's bottom-right = how many more (user 2026-11-28: the count belongs to the ring - the tile has no
+// card any more, its top-left is the game), the 🔒 on its top-right when it has a password, the title in two
+// lines (…), its age. Every
 // second (tick): the ring and the age move, a post past 20 minutes gives way to the next or to the empty
 // picture, a newer post takes the place. Empty, the tile stays: the scanner is seen to be alive.
 function tilePick(now) {
@@ -476,20 +478,20 @@ function drawTile(now = Date.now()) {
         if (cls === 'arc') c.setAttribute('pathLength', '100');
         rg.append(c);
       }
-      ring.append(rg, svgIcon(p.kind || 'normal'));
+      ring.append(rg, svgIcon(p.kind || 'normal'), el('span', 'more num'));
       if (p.pw) { const b = el('span', 'pwb'); b.append(lockIcon()); ring.append(b); }
-      box.replaceChildren(el('span', 'more num'), ring, el('div', 't2', p.title), el('div', 'tm num'));
+      box.replaceChildren(ring, el('div', 't2', p.title), el('div', 'tm num'));
     }
   }
   if (!p) return;
-  // what moves: the ring (the share of the 20 minutes left), the age colour and text, 외 N
+  // what moves: the ring (the share of the 20 minutes left), the age colour and text, N+
   const ms = p.t ? now - p.t : null;
   const left = ms == null ? 100 : Math.max(0, Math.min(100, ((STALE_MS - ms) / STALE_MS) * 100));
   box.querySelector('.arc').setAttribute('stroke-dasharray', `${left.toFixed(2)} 100`);
   const cls = ms == null ? '' : ageClass(ms);
   for (const c of ['a5', 'a10']) box.classList.toggle(c, c === cls);
   box.querySelector('.tm').textContent = ms == null ? '?' : `${ageText(ms)} 전`;
-  box.querySelector('.more').textContent = pick.count > 1 ? `외 ${pick.count - 1}` : '';
+  box.querySelector('.more').textContent = pick.count > 1 ? `${pick.count - 1}+` : '';
 }
 window.__tilePick = (now) => { const r = tilePick(now || Date.now()); return r && { no: r.post ? r.post.no : null, count: r.count }; };   // tests
 
