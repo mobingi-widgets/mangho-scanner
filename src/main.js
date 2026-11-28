@@ -1020,7 +1020,8 @@ function openMenu(build, act) {
   const p = screen.getCursorScreenPoint();
   toPage({ type: 'menu', open: true });
   ctx.open({
-    anchor: { x: p.x, y: p.y + 6, right: cfg.align !== 'left', top: p.y - 6, up: !appMode && cfg.valign === 'bottom' }, zoom, build, act,
+    // (beside: where the menu goes when it fits neither above nor below - next to the overlay, away from the list)
+    anchor: { x: p.x, y: p.y + 6, right: cfg.align !== 'left', top: p.y - 6, up: !appMode && cfg.valign === 'bottom', beside: win.getBounds() }, zoom, build, act,
     onClose: () => toPage({ type: 'menu', open: false }),
   });
 }
