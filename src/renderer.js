@@ -935,7 +935,7 @@ window.mangho.onFeed((d) => {
     // update window it opens (never by itself)
     $('menu').classList.toggle('upd', !!d.version);
     $('menu').dataset.upd = d.version || '';
-    updPill = d.pill ? '새로운 업데이트가 있습니다!' : '';
+    updPill = d.pill ? (d.beta ? '새 베타가 있습니다!' : '새로운 업데이트가 있습니다!') : '';      // (베타: a pre-release)
     drawPill();
     setProblems(problems);
   } else if (d.type === 'update-toast') {
