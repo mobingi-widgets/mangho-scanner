@@ -12,6 +12,12 @@ body { color: #e7e3da; font: 400 13px/1.5 "Malgun Gothic", "Segoe UI", system-ui
 }
 /* the margin is room for the whole shadow (shared/cardwin.js MARGIN - the window passes the mouse there) */
 .manager { position: relative; width: min(448px, calc(100% - 60px)); margin: 30px auto 40px; }
+/* a window held short by the screen (a large 배율 on a small one) keeps the card inside it: the list gives way and
+   scrolls, the buttons stay (as the update window's notes; the window is still sized to the whole card -
+   shared/cardsize.js measures it without this cap) */
+.manager { display: flex; flex-direction: column; max-height: calc(100vh - 70px); }
+.manager > * { flex: none; }
+.manager > .list { flex: 0 1 auto; min-height: 0; }
 h1, h2 { margin: 0 0 10px; color: #fff; font-size: 16px; }
 /* the title line moves the window (it has no frame): a drag handle, its grip at the right end
    (user report 2026-11-27). The band card's title too, when it is a window of its own. */

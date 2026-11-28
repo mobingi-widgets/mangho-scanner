@@ -20,10 +20,10 @@ function el(tag, cls, text) {
 
 const confirmMode = location.hash.startsWith('#confirm=');
 
-// the window is as tall as what shows
+// the window is as tall as what shows: its whole height, measured as the update window's card is (shared/cardsize.js
+// - never the height a cap holds it to)
 function report() {
-  const box = (confirmMode ? $('warn') : $('manager')).getBoundingClientRect();
-  window.authors.ui('height', Math.ceil(box.height + 14));
+  window.authors.ui('height', Math.ceil(window.cardHeight(confirmMode ? $('warn') : $('manager')) + 14));
 }
 
 // ---------------------------------------------------------------- the warning
