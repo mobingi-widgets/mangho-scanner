@@ -776,6 +776,7 @@ function updateVisibility() {
   if (visible && !win.isVisible()) win.showInactive();
   if (!visible && win.isVisible()) win.hide();
   if (visible) raise();
+  if (visible) flushBubble();         // a warning that came while hidden
 }
 
 // ☰ dragged = docking (dock.js: snap lines, no-go zones, push-out). The drop is kept
@@ -980,7 +981,8 @@ function menuAct(id, opt) {
     case 'show': setShow(opt); return opt !== 'hidden';
     case 'subs': setSubs(opt); return true;
     case 'nogame': if (NO_GAME.includes(opt)) { saveCfg({ noGame: opt }); if (noGame) noGame.setting(opt); } return true;
-    case 'autostart': if (autostart) autostart.set(opt === 'on'); return true;
+    // (the menu stays open when it stuck; closes when not, so the bubble under the ☰ shows)
+    case 'autostart': return autostart ? autostart.set(opt === 'on') : false;
     case 'newalert': saveCfg({ newAlert: opt === 'on' }); return true;
     case 'newsound': saveCfg({ newSoundVol: stepped(opt, SOUND_VOL, cfg.newSoundVol) }); previewSound(); return true;
     case 'nickmode': if (NICK_MODES.includes(opt)) { saveCfg({ nickMode: opt, ...(NICK_BACK.includes(opt) ? { nickPrev: opt } : {}) }); toPage(windowState()); } return true;
@@ -1046,6 +1048,19 @@ function trayClick() {
   if (cfg.show === 'hidden') setShow(cfg.showBefore || 'always');
   else if (autoHidden()) setShow(cfg.show);
   else setShow('hidden');
+}
+
+// A short warning in the bubble under the ☰ (the "새 버전" pill's place; user 2026-11-28 - autostart.js onFail),
+// kept until the window shows: a start at login may be hidden for want of a game
+let pendingBubble = null;
+function bubble(text, sec = 10) {
+  pendingBubble = { type: 'update-toast', text, level: 'warn', sec };
+  flushBubble();
+}
+function flushBubble() {
+  if (!pendingBubble || !win || win.isDestroyed() || !win.isVisible() || win.webContents.isLoading()) return;
+  toPage(pendingBubble);
+  pendingBubble = null;
 }
 
 function setOpacity(o) {
@@ -1468,6 +1483,7 @@ if (!app.requestSingleInstanceLock()) {
     autostart = autostartLib.create({
       name: 'mobingi-mangho-scanner', installed: () => app.isPackaged, exe: () => process.execPath,
       want: () => cfg.autostart === true, save: (on) => saveCfg({ autostart: on }),
+      onFail: (_kind, text) => bubble(text),     // a write that did not stick (read back)
       login: { get: (o) => app.getLoginItemSettings(o), set: (o) => app.setLoginItemSettings(o) },
     });
     const testRun = !!(SHOT || DEMO || FAKE_GAME);
