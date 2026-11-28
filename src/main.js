@@ -186,8 +186,13 @@ if (DEMO) app.setPath('userData', path.join(require('os').tmpdir(), 'mangho-scan
 else if (SHOT) app.setPath('userData', path.join(require('os').tmpdir(), 'mangho-scanner-shot'));
 // MANGHO_USER_DATA=<dir>: run with a settings folder of its own (tests next to an installed copy)
 else if (process.env.MANGHO_USER_DATA) app.setPath('userData', process.env.MANGHO_USER_DATA);
-// a window Windows reports as covered stops drawing - the demo's pictures must not depend on what else is on screen
-if (DEMO) app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+// Chromium's native window occlusion: a window it takes for covered stops drawing. It counts a per-pixel layered
+// window that takes the mouse as opaque - the ☰ menu's full-screen click catcher (ctxmenu.js) is one - so with the
+// menu open the overlay was "covered": a 배율 step resized it and nothing was drawn; it came back when the menu
+// closed (the user's report 2026-11-28, read from the screen by 운영담당). Off, always (it also keeps the demo's
+// pictures independent of what else is on screen). Hidden windows still do not draw. Any other feature to disable
+// goes into this one comma list: appendSwitch twice does not merge.
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 // MANGHO_GAME_RECT=x,y,w,h (screen px), only with MANGHO_USER_DATA: a stand-in game window for
 // tests (the area's placement) - no window tracker, no gallery reads, no update checks
 const FAKE_GAME = process.env.MANGHO_USER_DATA ? process.env.MANGHO_GAME_RECT || '' : '';
