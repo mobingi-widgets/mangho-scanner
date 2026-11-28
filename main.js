@@ -23,6 +23,8 @@ const toastLib = require('./toast-ui');
 const hitpoll = require('./hitpoll');
 const lockLib = require('./lock');
 const trayState = require('./tray-state');
+const nogameLib = require('./nogame');
+const autostartLib = require('./autostart');
 const authorsLib = require('./authors-store');
 const authorsUiLib = require('./authors-ui');
 
@@ -44,7 +46,9 @@ function makeUpdateUi() {
     canInstall: () => app.isPackaged,
     stageRoot: () => path.join(process.resourcesPath, '.update'),
     previousDir: () => path.join(process.resourcesPath, '.update', 'previous'),
-    installOpts: () => ({ appDir: path.join(process.resourcesPath, 'app'), keep: [], launch: process.execPath, launchCwd: path.dirname(process.execPath) }),
+    installOpts: () => ({ appDir: path.join(process.resourcesPath, 'app'), keep: [], launch: process.execPath, launchCwd: path.dirname(process.execPath),
+      // hidden for want of a game: the restart stays hidden too (a quiet start) - no window popping up at night
+      launchArgs: autoHidden() ? autostartLib.FLAG : '' }),
     cfg: () => cfg, saveCfg, near: () => gameRectDip(), avoid: overlayRects,
     // results and "x.y.z로 업데이트됨" go to the toast window; with toasts off (or below the level) the pill
     page: (m) => { if (m.type !== 'update-toast' || !notify({ text: m.text, level: m.level, sec: m.sec, by: '업데이트' })) toPage(m); },
@@ -54,7 +58,10 @@ function makeUpdateUi() {
 }
 
 const EVERY_MS = 60 * 1000;      // one scan a minute (user)
-const APP_AFTER_MS = 3000;       // the game window must be gone this long (loading screens blink)
+// Scans start at least this far apart, whatever asks (user 2026-11-28): the minute, 지금 스캔, back from
+// 숨김, 잠망호 표시 out of 숨김, the game window coming back. One asked for sooner waits for it (requestScan).
+const SCAN_GAP_MS = 10 * 1000;
+const APP_AFTER_MS = 3000;       // the game window must be gone this long (loading screens blink; nogame.js)
 const REF_GAME_HEIGHT = 680;     // DIP height the CSS sizes were set for; larger game windows zoom up
 // Right side by default (the left is taken by the 주간 납품 overlay): below the quest
 // tracker (it reaches ~35% with five quests) and left of the column of context
@@ -71,6 +78,8 @@ const WIDTH_STRIP = 8;
 const DEFAULTS = { width: 292 + WIDTH_STRIP, align: 'right', ...POS.right, valign: 'top', fyb: 0.9, show: 'always', opacity: 1, expanded: true, nickMode: 'code', tab: 'normal', role: 'all', scale: 100, text: 100, subs: 'tab', newAlert: false, newSoundVol: 0, lockShrink: false, v: 3,
   // the column heads of the list (user 2026-11-28): 작성자 = 코드 and back to nickPrev (닉 | 닉(코드)); 시간 = 47m
   nickPrev: 'code', ageShort: false,
+  // (user 2026-11-28) 게임 창을 찾지 못할 때 [숨김 | 창] (nogame.js) · 부팅 시 자동 실행 (autostart.js)
+  noGame: 'hide', autostart: false,
   // toasts (1.6.0, as in 주간 납품): pos = top | center | bottom of the game window, min = the least level shown
   toast: { on: true, pos: 'top', min: 'info' } };
 // 작성자 칸 (user 2026-11-27): off | nick | code = 닉(코드) - the id of a 반고닉, the IP prefix of a 유동 |
@@ -78,6 +87,7 @@ const DEFAULTS = { width: 292 + WIDTH_STRIP, align: 'right', ...POS.right, valig
 // list's 작성자 head goes to 코드 and back to the mode before it (cfg.nickPrev: nick or code).
 const NICK_MODES = ['off', 'nick', 'code', 'codeonly'];
 const NICK_BACK = ['nick', 'code'];
+const NO_GAME = ['hide', 'window'];
 // 잠망호 표시 (user 2026-11-27): show = 표시 (in the 망호 tab) | tab = 따로 표시 (their own tab, the
 // default - as before) | hide = 숨김 (left out of the scan: no body or comments read, not counted)
 const SUB_MODES = ['show', 'tab', 'hide'];
@@ -109,7 +119,8 @@ let height = 120;
 let baseZoom = 1;   // the zoom at the user's own 배율 (toasts, the update window, the notice - not shrunk)
 let zoom = 1;
 let appMode = false;
-let lostSince = 0;
+let noGame = null;                // nogame.js: what to do while the game window cannot be found (auto-hide)
+let autostart = null;             // autostart.js: 부팅 시 자동 실행
 let interactive = false;          // the window takes the mouse right now (hitpoll.js decides)
 let hits = null;                  // hitpoll.js
 let lock = null;                  // lock.js (잠금)
@@ -131,6 +142,8 @@ function loadCfg() {
   if (!NICK_MODES.includes(c.nickMode)) c.nickMode = 'code';
   if (c.nickPrev !== 'nick') c.nickPrev = 'code';      // NICK_BACK: 닉 or 닉(코드)
   c.ageShort = c.ageShort === true;
+  if (c.noGame !== 'window') c.noGame = 'hide';         // NO_GAME (a new install and 1.12.0 settings: 숨김)
+  c.autostart = c.autostart === true;
   // 1.5.0 and before (v1): no strip for the width bar yet
   if ((saved.v || 1) < 2 && typeof saved.width === 'number') c.width = saved.width + WIDTH_STRIP;
   // 1.6.x and before (v2): no area yet - the same fields are the area, content at its top
@@ -182,7 +195,9 @@ function toPage(obj) {
 // -------------------------------------------------------------------- scanning
 
 const state = scanner.createState(cfg.source);
-const scan = { last: null, okAt: 0, fails: 0, error: '', busy: false, timer: null, nextAt: 0, paused: false };
+// startedAt: the last start (SCAN_GAP_MS); pending: the one scan waiting for the gap; baseline: the next scan
+// only sets what is known - no 새 망호 alerts (the first after an auto-hide)
+const scan = { last: null, okAt: 0, fails: 0, error: '', busy: false, timer: null, nextAt: 0, paused: false, startedAt: 0, pending: null, baseline: false };
 
 // A scan the user asked for (☰ / tray → 지금 스캔; user 2026-11-27: a pressed button must not look
 // dead): one toast that says it runs and then turns into how it went. With toasts off (or below the
@@ -192,28 +207,55 @@ function scanSay(text, level, sec) {
   if (manualScan && manualScan.toast) notify({ id: 'scan-now', text, level, sec, by: '스캐너' });
   else toPage({ type: 'update-toast', text, level, sec });
 }
+const HIDDEN_SAYS = '숨긴 동안은 스캔하지 않습니다';
 function scanNow() {
-  if (cfg.show === 'hidden') {         // hidden = no scans (nobody is looking)
-    const text = '숨긴 동안은 스캔하지 않습니다';
-    if (!notify({ id: 'scan-now', text, level: 'warn', by: '스캐너' })) toPage({ type: 'update-toast', text, level: 'warn', sec: 3 });
+  if (hiddenNow()) {                   // hidden = no scans (nobody is looking)
+    if (!notify({ id: 'scan-now', text: HIDDEN_SAYS, level: 'warn', by: '스캐너' })) toPage({ type: 'update-toast', text: HIDDEN_SAYS, level: 'warn', sec: 3 });
     return;
   }
   manualScan = { toast: notify({ id: 'scan-now', text: '스캔 중…', level: 'info', sec: 60, by: '스캐너' }) };
   if (!manualScan.toast) toPage({ type: 'update-toast', text: '스캔 중…', level: 'info', sec: 30 });
-  if (!scan.busy) runScan();           // one already running (the minute's own) answers instead
+  // one already running (the minute's own) answers instead; within SCAN_GAP_MS of the last start this one
+  // waits - "스캔 중…" a few seconds longer, then "스캔 완료 · 새 글 N" as always
+  if (!scan.busy) requestScan();
+}
+
+// Every scan is asked for here (user 2026-11-28): within SCAN_GAP_MS of the last start it waits. However
+// often it is asked meanwhile - 지금 스캔 pressed again and again, the tray toggled, 잠망호 표시 switched - one
+// scan starts when the gap is up (not dropped: 잠망호 표시 out of 숨김 right after a scan would leave that tab
+// empty for a minute). No message about the wait. The minute stays: the next is due 60 s after a start.
+function requestScan() {
+  const wait = scan.startedAt + SCAN_GAP_MS - Date.now();
+  if (wait > 0) {
+    if (!scan.pending) scan.pending = setTimeout(() => { scan.pending = null; requestScan(); }, wait);
+    return;
+  }
+  runScan();
 }
 
 async function runScan() {
   clearTimeout(scan.timer);
   scan.timer = null;
-  if (cfg.show === 'hidden' && !SHOT) { scan.paused = true; pushProblems(); return; }   // nobody is looking
+  if (hiddenNow() && !SHOT) {          // nobody is looking: paused (showing again asks for one)
+    clearTimeout(scan.pending);
+    scan.pending = null;
+    if (manualScan) { scanSay(HIDDEN_SAYS, 'warn', 3); manualScan = null; }
+    scan.paused = true;
+    pushProblems();
+    return;
+  }
   scan.paused = false;
   if (scan.busy) return;
+  if (Date.now() < scan.startedAt + SCAN_GAP_MS) { requestScan(); return; }   // (only ever through requestScan)
+  clearTimeout(scan.pending);           // this is the one that was waiting
+  scan.pending = null;
   scan.busy = true;
   toPage({ type: 'busy', on: true });
   const started = Date.now();
+  scan.startedAt = started;
   const seen = new Set(((scan.last && scan.last.posts) || []).map((p) => p.no));
   const first = !scan.last;                         // since the app started: everything would be new
+  const baseline = first || scan.baseline;          // ...or back from an auto-hide: only what is there now
   const subsWereHidden = !!scan.subsHidden;          // their 잠망호 were never read: not news now
   try {
     scan.subsHidden = cfg.subs === 'hide';
@@ -224,7 +266,8 @@ async function runScan() {
     if (manualScan) {
       const fresh = snap.posts.filter((p) => !seen.has(p.no) && !(authors && authors.hidden(p))).length;   // 차단 is not news
       scanSay(fresh ? `스캔 완료 · 새 글 ${fresh}` : '스캔 완료 · 새 글 없음', 'info', 3);
-    } else if (!first) alertNew(snap, seen, subsWereHidden);   // (지금 스캔 says 새 글 itself)
+    } else if (!baseline) alertNew(snap, seen, subsWereHidden);   // (지금 스캔 says 새 글 itself)
+    scan.baseline = false;
   } catch (e) {
     scan.fails += 1;
     scan.error = String((e && e.message) || e);
@@ -234,7 +277,7 @@ async function runScan() {
     scan.busy = false;
     toPage({ type: 'busy', on: false });
     scan.nextAt = started + EVERY_MS;
-    scan.timer = setTimeout(runScan, Math.max(1000, scan.nextAt - Date.now()));
+    scan.timer = setTimeout(requestScan, Math.max(1000, scan.nextAt - Date.now()));
     pushProblems();
   }
 }
@@ -261,7 +304,7 @@ const problemKey = (p) => p.split(' — ')[0].replace(/\s*\(.*$/, '').replace(/\
 // The tray icon says the state (tray-state.js): grey = hidden by the user, a red dot = a problem
 let trayUi = null;
 function updateTray() {
-  if (trayUi) trayUi.update({ hidden: cfg.show === 'hidden', problem: (problems()[0] || '').split(' — ')[0] });
+  if (trayUi) trayUi.update({ hidden: hiddenNow(), why: cfg.show !== 'hidden' && autoHidden() ? '게임 없음' : '', problem: (problems()[0] || '').split(' — ')[0] });
 }
 
 function pushProblems() {
@@ -575,11 +618,22 @@ function setMode(on) {
   place();
 }
 
+// the game window there or not: the overlay, a plain window, or hidden (nogame.js decides, at the moments it changes)
 function checkMode() {
-  if (SHOT || DEMO) return;
-  if (game.found && !process.env.MANGHO_FORCE_APP) { lostSince = 0; setMode(false); return; }
-  if (!lostSince) lostSince = Date.now();
-  if (Date.now() - lostSince >= APP_AFTER_MS) setMode(true);
+  if (SHOT || DEMO || !noGame) return;
+  noGame.tick(game.found && !process.env.MANGHO_FORCE_APP);
+}
+const autoHidden = () => !!(noGame && noGame.hidden());
+// nobody is looking: hidden by the user (☰ 표시 숨김) or for want of a game (no scans either way)
+const hiddenNow = () => cfg.show === 'hidden' || autoHidden();
+function makeNoGame(quiet) {
+  return nogameLib.create({
+    setting: () => cfg.noGame, quiet, afterMs: APP_AFTER_MS, setMode,
+    // hidden: no scans (runScan pauses); the first one after is only the baseline - no 새 망호 alerts
+    // for what came meanwhile (the game started in the morning must not set off a burst)
+    onHide: () => { scan.baseline = true; updateVisibility(); updateTray(); pushProblems(); },
+    onShow: () => { updateVisibility(); updateTray(); requestScan(); },
+  });
 }
 
 // ------------------------------------------------------------- width bar
@@ -715,7 +769,7 @@ function place() {
 function updateVisibility() {
   if (!win || win.isDestroyed()) return;
   let visible;
-  if (cfg.show === 'hidden') visible = false;
+  if (hiddenNow()) visible = false;
   else if (appMode || cfg.show === 'always') visible = true;
   else visible = !game.found ? true : (!game.minimized && (game.front === 'game' || game.front === 'self'));
   if (SHOT || DEMO) visible = true;
@@ -848,6 +902,10 @@ function menuItems() {
     options: [['always', '항상'], ['game', '게임 앞'], ['hidden', '숨김']].map(([id, label]) => ({ id, label, on: cfg.show === id })),
   });
   items.push({
+    type: 'segment', id: 'nogame', label: '게임 없을 때', tip: '게임 창을 찾지 못할 때 — 숨김: 트레이 아이콘만 · 창: 일반 창으로',
+    options: [['hide', '숨김'], ['window', '창']].map(([id, label]) => ({ id, label, on: cfg.noGame === id })),
+  });
+  items.push({
     type: 'segment', id: 'subs', label: '잠망호 표시', tip: '표시: 망호 탭에 함께 · 숨김: 읽지도 세지도 않음',
     options: [['show', '표시'], ['tab', '따로 표시'], ['hide', '숨김']].map(([id, label]) => ({ id, label, on: cfg.subs === id })),
   });
@@ -882,6 +940,7 @@ function menuItems() {
     buttons: [
       { id: 'notice', icon: 'info', label: '이용 안내 보기' },
       { id: 'reset-pos', icon: 'locate', label: '위치 초기화', tip: '위치 초기화 · 옮기려면 ☰를 끕니다' },
+      ...(autostart ? [autostart.button()] : []),     // 부팅 시 자동 실행 (autostart.js)
       ...(toast ? toast.barButtons() : []),            // 알림 등급 · 시험 알림
     ],
   });
@@ -894,7 +953,7 @@ function setSubs(mode) {
   const wasHidden = cfg.subs === 'hide';
   saveCfg({ subs: mode, ...(mode !== 'tab' && cfg.tab === 'sub' ? { tab: 'normal' } : {}) });
   toPage(windowState());
-  if (wasHidden && !scan.busy && !DEMO && !FAKE_GAME) runScan();    // (the test runs read no gallery)
+  if (wasHidden && !DEMO && !FAKE_GAME) requestScan();    // (the test runs read no gallery)
 }
 
 // a click on the list's column head (user 2026-11-28): 작성자 -> 코드 and back to the mode before it (닉 or
@@ -920,6 +979,8 @@ function menuAct(id, opt) {
     case 'reset-pos': saveCfg({ ...POS[cfg.align], valign: 'top' }); toPage(windowState()); place(); return false;
     case 'show': setShow(opt); return opt !== 'hidden';
     case 'subs': setSubs(opt); return true;
+    case 'nogame': if (NO_GAME.includes(opt)) { saveCfg({ noGame: opt }); if (noGame) noGame.setting(opt); } return true;
+    case 'autostart': if (autostart) autostart.set(opt === 'on'); return true;
     case 'newalert': saveCfg({ newAlert: opt === 'on' }); return true;
     case 'newsound': saveCfg({ newSoundVol: stepped(opt, SOUND_VOL, cfg.newSoundVol) }); previewSound(); return true;
     case 'nickmode': if (NICK_MODES.includes(opt)) { saveCfg({ nickMode: opt, ...(NICK_BACK.includes(opt) ? { nickPrev: opt } : {}) }); toPage(windowState()); } return true;
@@ -969,13 +1030,22 @@ function roleMenuItems() {
 }
 
 function setShow(v) {
-  const wasHidden = cfg.show === 'hidden';
-  if (v === 'hidden' && !wasHidden) saveCfg({ showBefore: cfg.show });   // the tray click goes back to it
+  const wasHidden = hiddenNow();
+  if (v === 'hidden' && cfg.show !== 'hidden') saveCfg({ showBefore: cfg.show });   // the tray click goes back to it
   saveCfg({ show: v });
+  // asked to show while hidden for want of a game (the tray, a second start, ☰ 표시 from the tray): a plain
+  // window until the game window comes or goes (nogame.js)
+  if (v !== 'hidden' && noGame) noGame.reveal();
   updateTray();
   updateVisibility();
-  if (wasHidden && v !== 'hidden') runScan();     // back from hiding: catch up at once
+  if (wasHidden && !hiddenNow()) requestScan();     // back from hiding: catch up at once (SCAN_GAP_MS still holds)
   else pushProblems();
+}
+// the tray icon's click: show what is hidden (by the user or for want of a game), else hide
+function trayClick() {
+  if (cfg.show === 'hidden') setShow(cfg.showBefore || 'always');
+  else if (autoHidden()) setShow(cfg.show);
+  else setShow('hidden');
 }
 
 function setOpacity(o) {
@@ -1022,7 +1092,7 @@ function createTray() {
   tray = new Tray(nativeImage.createFromPath(path.join(__dirname, 'tray.png')));
   trayUi = trayState.create({ tray, dir: __dirname, name: '망호 스캐너' });
   updateTray();
-  tray.on('click', () => setShow(cfg.show === 'hidden' ? (cfg.showBefore || 'always') : 'hidden'));
+  tray.on('click', trayClick);
   tray.on('right-click', () => tray.popUpContextMenu(buildMenu()));
 }
 
@@ -1370,7 +1440,9 @@ app.on('web-contents-created', (_e, wc) => {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('second-instance', () => setShow(cfg.show === 'hidden' ? (cfg.showBefore || 'always') : cfg.show));
+  // started again by hand: show it (also when hidden for want of a game); the login start of a copy already
+  // running (autostart.js) changes nothing
+  app.on('second-instance', (_e, argv) => { if (!autostartLib.quiet(argv)) setShow(cfg.show === 'hidden' ? (cfg.showBefore || 'always') : cfg.show); });
   app.whenReady().then(async () => {
     cfg = loadCfg();
     if (cfgOlder) saveCfg({});
@@ -1391,6 +1463,18 @@ if (!app.requestSingleInstanceLock()) {
       saveCfg({ notice: noticeV, noticeAt: new Date().toISOString(), noticeDeclined: null });
     }
     if (cfg.source) state.src = { ...state.src, ...cfg.source };
+    // 부팅 시 자동 실행 (autostart.js): only the built exe writes the login item (a source run shares this
+    // settings file with it); every start puts the entry right
+    autostart = autostartLib.create({
+      name: 'mobingi-mangho-scanner', installed: () => app.isPackaged, exe: () => process.execPath,
+      want: () => cfg.autostart === true, save: (on) => saveCfg({ autostart: on }),
+      login: { get: (o) => app.getLoginItemSettings(o), set: (o) => app.setLoginItemSettings(o) },
+    });
+    const testRun = !!(SHOT || DEMO || FAKE_GAME);
+    if (!testRun) autostart.sync();
+    // started at login (or again after an update made while hidden): with 숨김, hidden from the first moment
+    // until the game window shows; started by hand: a plain window if there is no game (nogame.js)
+    noGame = makeNoGame(!testRun && autostartLib.quiet(process.argv));
     startAuthors();
     createTray();
     createWindow();
@@ -1450,7 +1534,7 @@ if (!app.requestSingleInstanceLock()) {
       return;
     }
     startTracker();
-    runScan();
+    requestScan();
     if (!SHOT) {
       uui.start();
       setTimeout(() => uui.afterStart(), 4000);      // "x.y.z로 업데이트됨" / "되돌렸습니다" once the toasts are up
