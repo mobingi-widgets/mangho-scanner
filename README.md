@@ -207,7 +207,7 @@
 | `src/authors-*` | 차단·메모 관리 창과 그 목록 |
 | `src/notice.html` | 이용 안내 (판 번호는 `notice-version`) |
 | `src/preload.js` | 화면 ↔ 본체 연결 |
-| `src/shared/` | 주간 납품 위젯와 같은 파일(바이트까지 같음 — 고치면 둘 다): 업데이트(`updater.js` · `apply-update.ps1` · `update-*`), 이용 안내(`consent.js` · `notice.js` · `notice.css`), ☰ 메뉴(`ctxmenu.js` · `menu-*`), 알림 창(`toast-*`), ☰ 끌기 위치 옮기기(`dock.js` · `guide-*`), 마우스 판정(`hitpoll.js` · `hitrects.js`), 잠금(`lock*`), 트레이 상태, 게임 창이 없을 때(`nogame.js`), 부팅 시 자동 실행(`autostart.js`) |
+| `src/shared/` | 주간 납품 위젯과 같은 파일(바이트까지 같음 — 고치면 둘 다): 업데이트(`updater.js` · `apply-update.ps1` · `update-*`), 이용 안내(`consent.js` · `notice.js` · `notice.css`), ☰ 메뉴(`ctxmenu.js` · `menu-*`), 알림 창(`toast-*`), ☰ 끌기 위치 옮기기(`dock.js` · `guide-*`), 마우스 판정(`hitpoll.js` · `hitrects.js`), 잠금(`lock*`), 트레이 상태, 게임 창이 없을 때(`nogame.js`), 부팅 시 자동 실행(`autostart.js`) |
 | `assets/` | 아이콘 · 트레이 아이콘 · 작성자 표시(`author-icons/`) · 새 망호 소리(`sounds/` — 파도 transitking(Freesound 11505) · 갈매기 Lydmakeren(Freesound 510917), 둘 다 CC0, `sounds/LICENSE.txt`) |
 | `망호 스캐너.bat` | 실행 (첫 실행 시 Electron 설치) |
 | `scripts/build_dist.py` · `scripts/build_exe.js` | 배포본 만들기 (개발용): exe 빌드(@electron/packager) → zip. `npm install` 후 `python scripts/build_dist.py`, 릴리스 파일은 `--release`(먼저 `npm test`, 실패하면 만들지 않음) |
