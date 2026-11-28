@@ -46,5 +46,16 @@ const ROOT = path.resolve(__dirname, '..');      // the app
       OriginalFilename: `${NAME}.exe`, InternalName: 'mangho-scanner',
     },
   });
+  // Electron fuses (user 2026-11-28): the exe cannot be run as plain Node (ELECTRON_RUN_AS_NODE) or take debugger
+  // arguments (--inspect...) - nothing of ours uses either. NODE_OPTIONS stays on: packaged Electron already drops
+  // --require, and the update test (test/update) relies on it in its renamed copies. build_dist.py reads the
+  // wire back from the built exe and refuses a build without these. (Only a first install - full.zip - carries
+  // the exe; a code-only update keeps the one the user has.)
+  const { flipFuses, FuseVersion, FuseV1Options } = await import('@electron/fuses');
+  await flipFuses(path.join(paths[0], 'mangho-scanner.exe'), {
+    version: FuseVersion.V1,
+    [FuseV1Options.RunAsNode]: false,
+    [FuseV1Options.EnableNodeCliInspectArguments]: false,
+  });
   console.log(JSON.stringify(paths));
 })().catch((e) => { console.error(e.stack || String(e)); process.exit(1); });

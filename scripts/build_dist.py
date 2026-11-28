@@ -95,6 +95,23 @@ def make_icon():
     src.save(os.path.join(HERE, "icon.ico"), sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
 
 
+FUSES = ("RunAsNode", "EnableCookieEncryption", "EnableNodeOptionsEnvironmentVariable", "EnableNodeCliInspectArguments",
+         "EnableEmbeddedAsarIntegrityValidation", "OnlyLoadAppFromAsar", "LoadBrowserProcessSpecificV8Snapshot",
+         "GrantFileProtocolExtraPrivileges")
+
+
+def read_fuses(exe):
+    """Electron's fuse wire, read from the exe (nothing runs): the sentinel, version 1, a length, then one byte per
+    fuse - '1' on, '0' off, 'r' removed. -> {name: '0' | '1' | 'r'} or None"""
+    with open(exe, "rb") as fh:
+        data = fh.read()
+    at = data.find(b"dL7pKGdnNz796PbbjQWNKmHXBZaB9tsX")
+    if at < 0 or data[at + 32] != 1:
+        return None
+    wire = data[at + 34:at + 34 + data[at + 33]].decode("latin-1")
+    return {name: wire[i] for i, name in enumerate(FUSES) if i < len(wire)}
+
+
 def build_app(build):
     """Package the app into build/; returns the app folder (exe renamed, locales trimmed)."""
     run = subprocess.run(["node", os.path.join(SCRIPTS, "build_exe.js"), build], cwd=HERE,
@@ -118,6 +135,10 @@ def build_app(build):
     for need in need:
         if not os.path.exists(os.path.join(app, need)):
             raise SystemExit("빌드 결과에 %s 없음: %s" % (need, app))
+    fuses = read_fuses(os.path.join(app, NAME + ".exe"))
+    want = {"RunAsNode": "0", "EnableNodeCliInspectArguments": "0", "EnableNodeOptionsEnvironmentVariable": "1"}
+    if not fuses or any(fuses.get(k) != v for k, v in want.items()):
+        raise SystemExit("빌드한 exe의 퓨즈가 정한 대로가 아님 (build_exe.js의 flipFuses): %s" % fuses)
     for never in ("test", "scripts"):          # tests and dev tools never ship (build_exe.js leaves them out)
         if os.path.exists(os.path.join(app, "resources", "app", never)):
             raise SystemExit("빌드 결과에 %s/ 가 들어 있음: %s" % (never, app))
