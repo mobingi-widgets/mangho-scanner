@@ -61,6 +61,11 @@ if (confirmMode) {
   $('warn').addEventListener('cancel', () => { warnThen = null; });       // Esc on the modal
 }
 new ResizeObserver(report).observe(document.body);
+// a button held on the card (a drag, a selection leaving it): the window keeps the mouse until it is let go
+// (authors-ui.js / shared/cardwin.js - over the shadow the window otherwise passes the mouse to the game)
+document.addEventListener('pointerdown', (e) => { if (e.target.closest('.manager, .warning')) window.authors.ui('hold', true); });
+for (const ev of ['pointerup', 'pointercancel']) window.addEventListener(ev, () => window.authors.ui('hold', false));
+window.addEventListener('blur', () => window.authors.ui('hold', false));
 
 // ---------------------------------------------------------------- the list
 function say(text, bad) {

@@ -25,6 +25,7 @@ class FakeWin {
   loadFile() {}
   on(ev, fn) { (this.handlers[ev] = this.handlers[ev] || []).push(fn); }
   isDestroyed() { return this.destroyed; }
+  setIgnoreMouseEvents(v) { this.ignore = v; }
   isVisible() { return this.visible; }
   showInactive() { this.visible = true; }
   show() { this.visible = true; }
@@ -50,6 +51,11 @@ const realLoad = Module._load;
 Module._load = function (req, ...rest) { return req === 'electron' ? fakeElectron : realLoad.call(this, req, ...rest); };
 
 const ui = require(path.join(dir, 'src', 'authors-ui.js'));
+// (2026-11-28) the windows have room for the cards' shadows: placing is checked on the rect the window had before
+// (the card and 6 px around it, 14 in height), the same numbers as then
+const cw = require(path.join(dir, 'src', 'shared', 'cardwin.js'));
+const frame = (b, z = 1) => { const c = cw.toCard(b, z); return { x: Math.round(c.x - 6 * z), y: Math.round(c.y - 6 * z), width: Math.round(c.width + 12 * z), height: Math.round(c.height + 14 * z) }; };
+const toWin = (f, z = 1) => cw.toWindow({ x: f.x + 6 * z, y: f.y + 6 * z, width: f.width - 12 * z, height: f.height - 14 * z }, z);
 const { besideRect } = ui;
 
 // ---- placement maths (DIP): a 1920 x 1040 work area, the overlay 300 wide
@@ -87,14 +93,14 @@ auth.open();
 const mgr = windows[windows.length - 1];
 mgr.name = 'manager';
 mgr.loaded();
-check('opens beside the overlay (not on it)', mgr.bounds.x + mgr.bounds.width <= right.x - 8 && mgr.bounds.x === 1612 - 8 - 460, JSON.stringify(mgr.bounds));
+check('opens beside the overlay (not on it)', frame(mgr.bounds).x + frame(mgr.bounds).width <= right.x - 8 && frame(mgr.bounds).x === 1612 - 8 - 460, JSON.stringify(frame(mgr.bounds)));
 check('shown without taking the keyboard, always on top (screen-saver)', mgr.visible && mgr.top === 'screen-saver');
-mgr.bounds = { ...mgr.bounds, x: 300, y: 200 };                 // dragged by its title line
+mgr.bounds = toWin({ ...frame(mgr.bounds), x: 300, y: 200 });                 // dragged by its title line
 ipcHandlers['authors-ui']({ sender: mgr.webContents }, 'height', 500);
-check('a height report after a move keeps the spot', mgr.bounds.x === 300 && mgr.bounds.y === 200 && mgr.bounds.height === 500, JSON.stringify(mgr.bounds));
-mgr.bounds = { ...mgr.bounds, y: 900 };
+check('a height report after a move keeps the spot', frame(mgr.bounds).x === 300 && frame(mgr.bounds).y === 200 && frame(mgr.bounds).height === 500, JSON.stringify(frame(mgr.bounds)));
+mgr.bounds = toWin({ ...frame(mgr.bounds), y: 900 });
 ipcHandlers['authors-ui']({ sender: mgr.webContents }, 'height', 500);
-check('...but stays inside the work area', mgr.bounds.y === 1040 - 500 - 8, JSON.stringify(mgr.bounds));
+check('...but stays inside the work area', frame(mgr.bounds).y === 1040 - 500 - 8, JSON.stringify(frame(mgr.bounds)));
 
 // ---- z-order: main.js raise() with the list up, then the band card too
 const { load } = require('../lib/extract');
@@ -117,7 +123,7 @@ cardWin.loaded();
 order.length = 0;
 api.raise();
 check('raise with the card too: overlay, list, card (the question on top)', JSON.stringify(order) === '["overlay","manager","card"]', JSON.stringify(order));
-check('the card opens beside the overlay too', cardWin.bounds.x + cardWin.bounds.width <= right.x - 8, JSON.stringify(cardWin.bounds));
+check('the card opens beside the overlay too', frame(cardWin.bounds).x + frame(cardWin.bounds).width <= right.x - 8, JSON.stringify(frame(cardWin.bounds)));
 tip.visible = true; toastWin.visible = true;
 order.length = 0;
 api.raise();

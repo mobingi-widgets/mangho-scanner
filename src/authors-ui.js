@@ -14,6 +14,7 @@ const { parseInput, MEMO_MAX } = require('./authors-store');
 const W = 460;              // CSS px (the card 448 + its margin); times the zoom
 const CONFIRM_W = 360;
 const GAP = 8;              // DIP: from the overlay, and from the work area's edges
+const cardwin = require('./shared/cardwin');
 
 // Where a window of width x height goes (DIP): beside the overlay (near), not on it - on the side
 // with more room (left of it when it is docked right, right of it when docked left), its top at the
@@ -50,21 +51,27 @@ function create(o) {
 
   // the first time: beside the overlay (besideRect). After that only its height follows the page:
   // the user may have moved it by its title line, so it stays there (kept inside the work area).
+  // (2026-11-28) each card has room for its whole shadow now (shared/cardwin.js): the placing below is the same as
+  // before, on the rect the window had then (the card and 6 px around it, 14 in height - authors.js), and the
+  // window is that card plus its margin - so the card lands where it did. The margin passes the mouse through.
   const placed = new WeakSet();
+  const through = new WeakMap();
+  const frameToWin = (f, z) => cardwin.toWindow({ x: f.x + 6 * z, y: f.y + 6 * z, width: f.width - 12 * z, height: f.height - 14 * z }, z);
+  const winToFrame = (b, z) => { const c = cardwin.toCard(b, z); return { x: c.x - 6 * z, y: c.y - 6 * z, width: c.width + 12 * z, height: c.height + 14 * z }; };
   function placeAt(w, cssW, cssH) {
     if (!alive(w)) return;
     const z = zoom();
     const width = Math.round(cssW * z);
     if (placed.has(w)) {
-      const b = w.getBounds();
+      const b = winToFrame(w.getBounds(), z);
       const a = screen.getDisplayMatching(b).workArea;
       const h = Math.min(Math.round(cssH * z), a.height - 2 * GAP);
-      w.setBounds({ x: b.x, y: Math.max(a.y + GAP, Math.min(b.y, a.y + a.height - h - GAP)), width, height: h });
+      w.setBounds(frameToWin({ x: b.x, y: Math.max(a.y + GAP, Math.min(b.y, a.y + a.height - h - GAP)), width, height: h }, z));
       return;
     }
     const near = o.near && o.near();
     const a = (near ? screen.getDisplayMatching(near) : screen.getDisplayNearestPoint(screen.getCursorScreenPoint())).workArea;
-    w.setBounds(besideRect(near, a, width, Math.min(Math.round(cssH * z), a.height - 2 * GAP)));
+    w.setBounds(frameToWin(besideRect(near, a, width, Math.min(Math.round(cssH * z), a.height - 2 * GAP)), z));
     placed.add(w);
   }
 
@@ -83,14 +90,16 @@ function create(o) {
   }
 
   function makeWindow(cssW, hash, label) {
+    const first = frameToWin({ x: 0, y: 0, width: Math.round(cssW * zoom()), height: 200 }, zoom());
     const w = new BrowserWindow({
-      width: Math.round(cssW * zoom()), height: 200, show: false, frame: false, transparent: true, backgroundColor: '#00000000',
+      width: first.width, height: first.height, show: false, frame: false, transparent: true, backgroundColor: '#00000000',
       hasShadow: false, resizable: false, minimizable: false, maximizable: false, skipTaskbar: true, alwaysOnTop: true,
       title: `${o.title} ${label}`,
       webPreferences: { preload: path.join(__dirname, 'authors-preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true,
         ...(o.test ? { offscreen: true } : {}) },
     });
     w.setAlwaysOnTop(true, 'screen-saver');
+    through.set(w, cardwin.clickThrough(w, { zoom }));     // the mouse over the shadow goes to the game
     w.webContents.on('will-navigate', (e) => e.preventDefault());
     w.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     w.loadFile(path.join(o.dir, 'authors.html'), { hash });
@@ -148,6 +157,11 @@ function create(o) {
   }
 
   ipcMain.on('authors-ui', async (e, action, arg) => {
+    // a button held on a card (authors.js): that window keeps the mouse until it is let go
+    if (action === 'hold') {
+      for (const w of [win, card && card.win]) if (alive(w) && e.sender === w.webContents && through.has(w)) through.get(w).hold(arg);
+      return;
+    }
     // the warning card
     if (card && alive(card.win) && e.sender === card.win.webContents) {
       if (action === 'height') { card.height = Math.max(100, Math.ceil(Number(arg) || 0)); placeAt(card.win, CONFIRM_W, card.height); return; }
