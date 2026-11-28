@@ -1,7 +1,8 @@
 // Build the ready-to-run Windows app folder ("망호 스캐너.exe" + Electron runtime) with
 // @electron/packager. Dev tool: build_dist.py calls it, then zips the folder.
 //
-//   node build_exe.js <out dir>      -> prints the built folder's path as JSON
+//   node scripts/build_exe.js <out dir>      -> prints the built folder's path as JSON
+// (the app is the folder above scripts/; scripts/ and test/ are left out of the build)
 //
 // asar is off on purpose: gamewin.ps1 is run by PowerShell, which cannot read a file
 // inside an asar archive. The app's package.json keeps its name (mangho-scanner), so the
@@ -12,13 +13,14 @@ const path = require('path');
 const { packager } = require('@electron/packager');
 
 const NAME = '망호 스캐너';
+const ROOT = path.resolve(__dirname, '..');      // the app
 
 (async () => {
   const out = process.argv[2];
-  if (!out) throw new Error('usage: node build_exe.js <out dir>');
-  const pkg = require('./package.json');
+  if (!out) throw new Error('usage: node scripts/build_exe.js <out dir>');
+  const pkg = require(path.join(ROOT, 'package.json'));
   const paths = await packager({
-    dir: __dirname,
+    dir: ROOT,
     out,
     overwrite: true,
     platform: 'win32',
@@ -29,10 +31,11 @@ const NAME = '망호 스캐너';
     executableName: 'mangho-scanner',
     appVersion: pkg.version,
     buildVersion: pkg.version,
-    icon: path.join(__dirname, 'icon.ico'),
+    icon: path.join(ROOT, 'icon.ico'),
     asar: false,
     prune: true,                       // devDependencies (electron, packager) stay out
-    ignore: [/^\/build_dist\.py$/, /^\/build_exe\.js$/, /\.bat$/, /^\/package-lock\.json$/,
+    // the dev tools (scripts/: this file, build_dist.py) and the tests (test/) are never shipped
+    ignore: [/^\/scripts($|\/)/, /^\/test($|\/)/, /\.bat$/, /^\/package-lock\.json$/,
       /^\/README\.md$/, /^\/CHANGELOG\.md$/, /^\/icon\.ico$/, /^\/docs($|\/)/, /^\/\.git/,
       // instructions for AI agents in the workspace - never shipped
       /^\/AGENTS\.md$/, /^\/CLAUDE\.md$/, /^\/\.claude($|\/)/,

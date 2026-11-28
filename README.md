@@ -205,6 +205,7 @@
 | `망호 스캐너.bat` | 실행 (첫 실행 시 Electron 설치) |
 | `updater.js` · `apply-update.ps1` | 업데이트 확인·서명 검증·교체·되돌리기 (주간 납품 위젯과 같은 파일) |
 | `nogame.js` · `autostart.js` | 게임 창이 없을 때 · 부팅 시 자동 실행 (주간 납품 위젯과 같은 파일) |
-| `build_dist.py` · `build_exe.js` | 배포본 만들기 (개발용): exe 빌드(@electron/packager) → zip. `npm install` 후 `python build_dist.py`, 릴리스 파일은 `--release` |
+| `scripts/build_dist.py` · `scripts/build_exe.js` | 배포본 만들기 (개발용): exe 빌드(@electron/packager) → zip. `npm install` 후 `python scripts/build_dist.py`, 릴리스 파일은 `--release`(먼저 `npm test`, 실패하면 만들지 않음) |
+| `test/` | 시험 (개발용, 배포본에 들어가지 않음): `npm test` — 단위 시험(node)과 화면 밖 페이지 시험(Electron, 화면에 창을 띄우지 않음) |
 
 변경 이력은 [CHANGELOG.md](CHANGELOG.md).

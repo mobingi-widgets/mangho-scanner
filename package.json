@@ -6,7 +6,8 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "scan": "node scanner.js"
+    "scan": "node scanner.js",
+    "test": "node test/run.js"
   },
   "devDependencies": {
     "@electron/packager": "20.3.0",

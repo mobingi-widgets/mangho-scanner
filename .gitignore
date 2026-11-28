@@ -6,7 +6,7 @@ __pycache__/
 *.pyc
 *.log
 
-# build output (build_dist.py, build_exe.js); icon.ico is made from icon.png
+# build output (scripts/build_dist.py, scripts/build_exe.js); icon.ico is made from icon.png
 dist/
 out/
 icon.ico

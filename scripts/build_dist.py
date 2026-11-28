@@ -2,9 +2,9 @@
 """Make the shareable build of 망호 스캐너: a ready-to-run Windows build (no Node.js needed).
 Only when the user asks for one (workspace policy: it is a ~145 MB build).
 
-    python build_dist.py                  # -> <workspace>/dist/망호 스캐너 <version>.zip
-    python build_dist.py --release        # -> <workspace>/dist/release/mangho-scanner/<version>/
-    python build_dist.py --release --out <dir>
+    python scripts/build_dist.py                  # -> <workspace>/dist/망호 스캐너 <version>.zip
+    python scripts/build_dist.py --release        # -> <workspace>/dist/release/mangho-scanner/<version>/
+    python scripts/build_dist.py --release --out <dir>
 
 --release makes the GitHub release files the apps' updater reads (updater.js):
     mangho-scanner-<v>-full.zip   the whole build ("망호 스캐너/" folder) - first install, new Electron
@@ -13,10 +13,11 @@ Only when the user asks for one (workspace policy: it is a ~145 MB build).
     mangho-scanner-<v>-app.zip    resources\\app only (the code, KB) - what an update swaps in
     mangho-scanner-notice-<N>.html  the notice (이용 안내) of this version, N = its notice-version
     latest.json                   {schema, app, version, pub_date, notes (CHANGELOG), runtime, notice, assets}
-    *.minisig                     each of the five, signed by ../tools/release/sign.js
+    *.minisig                     each of the five, signed by <workspace>/tools/release/sign.js
+--release first runs `npm test` (test/run.js) and makes nothing if a suite fails.
 Publishing them (tag v<version>) is done separately (tools/release/publish.js).
 
-Steps: icon.ico from icon.png (Pillow) -> `node build_exe.js` (@electron/packager, a
+Steps: icon.ico from icon.png (Pillow) -> `node scripts/build_exe.js` (@electron/packager, a
 devDependency: run `npm install` once) -> zip(s).
 The program keeps no personal data in its folder (settings live in %APPDATA%\\mangho-scanner);
 a zip that would carry a key file (*.pem, *.key, minisign*), a Python cache (*.pyc - it holds
@@ -35,7 +36,8 @@ import subprocess
 import sys
 import zipfile
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+SCRIPTS = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(SCRIPTS)            # the app (this file is in its scripts/)
 WORKSPACE = os.path.dirname(HERE)
 NAME = "망호 스캐너"
 APP_ID = "mangho-scanner"
@@ -94,7 +96,7 @@ def make_icon():
 
 def build_app(build):
     """Package the app into build/; returns the app folder (exe renamed, locales trimmed)."""
-    run = subprocess.run(["node", os.path.join(HERE, "build_exe.js"), build], cwd=HERE,
+    run = subprocess.run(["node", os.path.join(SCRIPTS, "build_exe.js"), build], cwd=HERE,
                          capture_output=True, text=True, encoding="utf-8")
     if run.returncode != 0:
         raise SystemExit("빌드 실패:\n" + run.stderr[-2000:])
@@ -113,6 +115,9 @@ def build_app(build):
                  os.path.join("resources", "app", "apply-update.ps1"), os.path.join("resources", "app", "toast-ui.js")):
         if not os.path.exists(os.path.join(app, need)):
             raise SystemExit("빌드 결과에 %s 없음: %s" % (need, app))
+    for never in ("test", "scripts"):          # tests and dev tools never ship (build_exe.js leaves them out)
+        if os.path.exists(os.path.join(app, "resources", "app", never)):
+            raise SystemExit("빌드 결과에 %s/ 가 들어 있음: %s" % (never, app))
     return app
 
 
@@ -166,6 +171,13 @@ def electron_selftest(files):
     return run.returncode == 0 and "verified" in run.stdout, out[-800:]
 
 
+def run_tests():
+    """`npm test` (test/run.js): a release is never made from a tree whose tests fail. -> (ok, its output)"""
+    npm = "npm.cmd" if os.name == "nt" else "npm"
+    run = subprocess.run([npm, "test"], cwd=HERE, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    return run.returncode == 0, (run.stdout or "") + (run.stderr or "")
+
+
 def main(argv):
     release = "--release" in argv
     out_root = argv[argv.index("--out") + 1] if "--out" in argv else os.path.join(WORKSPACE, "dist")
@@ -181,6 +193,12 @@ def main(argv):
     if release and not changelog_notes(ver):
         print("CHANGELOG.md에 %s 절이 없음 — 릴리스 노트가 비어 만들지 않음" % ver)
         return 1
+    if release:
+        ok, out = run_tests()
+        if not ok:
+            print("npm test 실패 — 릴리스를 만들지 않음:\n" + "\n".join(out.strip().splitlines()[-40:]))
+            return 1
+        print("  " + out.strip().splitlines()[-1])
     make_icon()
     build = os.path.join(out_root, ".build")
     shutil.rmtree(build, ignore_errors=True)
