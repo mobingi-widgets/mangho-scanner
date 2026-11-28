@@ -56,12 +56,12 @@ const standIns = {
   updateVisibility: () => { visible = !(cfg.show === 'hidden' || ng.inner.hidden()); },
   alertNew: (snap, seen) => alerts.push(snap.posts.filter((p) => !seen.has(p.no)).map((p) => p.no)),
   withAuthors: (s) => s, authors: null, SHOT: false, DEMO: false, FAKE_GAME: false, takeShots: () => {}, shotDone: false,
-  nogameLib: require(path.join(dir, 'nogame.js')), game, noGame, windowState: () => ({}),
+  nogameLib: require(path.join(dir, 'src', 'shared', 'nogame.js')), game, noGame, windowState: () => ({}),
   setMode: (on) => modes.push(on ? 'app' : 'overlay'),
   uui: null, toast: null, lock: null, autostart: null,
   setTimeout: fakeSetTimeout, clearTimeout: fakeClearTimeout,
 };
-const { api } = load(path.join(dir, 'main.js'), ['SCAN_GAP_MS', 'EVERY_MS', 'APP_AFTER_MS', 'NO_GAME', 'SUB_MODES', 'scan', 'manualScan', 'HIDDEN_SAYS',
+const { api } = load(path.join(dir, 'src', 'main.js'), ['SCAN_GAP_MS', 'EVERY_MS', 'APP_AFTER_MS', 'NO_GAME', 'SUB_MODES', 'scan', 'manualScan', 'HIDDEN_SAYS',
   'scanSay', 'scanNow', 'requestScan', 'runScan', 'checkMode', 'autoHidden', 'hiddenNow', 'makeNoGame', 'setShow', 'trayClick', 'setSubs', 'menuAct'], standIns);
 ng.inner = api.makeNoGame(false);
 const S = api.scan;

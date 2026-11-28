@@ -5,7 +5,7 @@
 const path = require('path');
 const { ROOT } = require('../lib/env');
 const LIST = process.argv.includes('--list');
-const S = require(path.join(ROOT, 'scanner.js'));
+const S = require(path.join(ROOT, 'src', 'scanner.js'));
 
 let ok = true;
 let n = 0;

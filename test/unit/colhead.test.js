@@ -5,7 +5,7 @@
 const path = require('path');
 const { load } = require('../lib/extract');
 const { ROOT: dir } = require('../lib/env');
-const MAIN = path.join(dir, 'main.js');
+const MAIN = path.join(dir, 'src', 'main.js');
 let ok = true;
 let n = 0;
 const check = (what, cond, extra = '') => { n++; console.log(`${cond ? 'ok  ' : 'FAIL'} ${what}${extra ? `  (${extra})` : ''}`); if (!cond) ok = false; };

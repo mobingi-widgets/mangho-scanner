@@ -6,7 +6,7 @@
 const path = require('path');
 const { ROOT } = require('../lib/env');
 const t = require('../lib/check')();
-const S = require(path.join(ROOT, 'scanner.js'));
+const S = require(path.join(ROOT, 'src', 'scanner.js'));
 
 const kstText = (ms) => new Date(ms + 9 * 3600000).toISOString().slice(0, 19).replace('T', ' ');
 const T0 = Date.parse('2026-11-27T12:00:00Z');

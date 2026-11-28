@@ -15,9 +15,9 @@ app.whenReady().then(async () => {
   fs.mkdirSync(out, { recursive: true });
   const W = 340;
   const win = new BrowserWindow({ width: W, height: 230, show: false, frame: false, transparent: true, backgroundColor: '#00000000',
-    webPreferences: { offscreen: true, preload: path.join(dir, 'preload.js'), contextIsolation: true, sandbox: false } });
+    webPreferences: { offscreen: true, preload: path.join(dir, 'src', 'preload.js'), contextIsolation: true, sandbox: false } });
   ipcMain.on('ui', () => {});
-  await win.loadFile(path.join(dir, 'index.html'));
+  await win.loadFile(path.join(dir, 'src', 'index.html'));
   const feed = (d) => win.webContents.send('feed', d);
   const js = (c) => win.webContents.executeJavaScript(c);
   const now = Date.now();

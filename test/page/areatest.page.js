@@ -15,8 +15,8 @@ let ok = true;
 const check = (what, cond, extra = '') => { console.log(`${cond ? 'ok  ' : 'FAIL'} ${what}${extra ? `  (${extra})` : ''}`); if (!cond) ok = false; };
 
 app.whenReady().then(async () => {
-  const dockLib = require(path.join(dir, 'dock.js'));
-  const hitpoll = require(path.join(dir, 'hitpoll.js'));
+  const dockLib = require(path.join(dir, 'src', 'shared', 'dock.js'));
+  const hitpoll = require(path.join(dir, 'src', 'shared', 'hitpoll.js'));
   try {
     // ---------------------------------------------------------------- areaRect vs the old place()
     const old = (g, c, zoom) => {          // until 1.6.1 / 1.4.4: top at fy, the content limit below it

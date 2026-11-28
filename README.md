@@ -198,19 +198,20 @@
 
 | 파일 | 하는 일 |
 |---|---|
-| `scanner.js` | 망호 탭 읽기·출항 판정. `node scanner.js`로 한 번 스캔해서 결과만 출력 (Electron 없이) |
-| `main.js` | 오버레이 창·배치·☰ 메뉴·1분 스캔 |
-| `gamewin.ps1` | 게임 창 위치 추적 (Windows 창 조회만) |
-| `dock.js` · `guide.html` · `guide.js` · `guide-preload.js` | ☰ 끌기 위치 옮기기와 그 안내 화면 (주간 납품 위젯과 같은 파일) |
-| `renderer.js` `index.html` `style.css` | 목록 화면 |
-| `tip.js` `tip.html` | 툴팁 창 |
-| `toast-ui.js` · `toast.html` · `toast.js` · `toast-preload.js` | 알림(토스트) 창 (주간 납품 위젯과 같은 파일 — 실행 중에는 서로 모름) |
-| `preload.js` | 화면 ↔ 본체 연결 |
-| `sounds/` | 새 망호 소리 — 파도 transitking(Freesound 11505) · 갈매기 Lydmakeren(Freesound 510917), 둘 다 CC0 (`sounds/LICENSE.txt`) |
+| `package.json` | 버전, 시작 파일(`src/main.js`) |
+| `src/main.js` | 오버레이 창·배치·☰ 메뉴·1분 스캔 |
+| `src/scanner.js` | 망호 탭 읽기·출항 판정. `node src/scanner.js`로 한 번 스캔해서 결과만 출력 (Electron 없이) |
+| `src/gamewin.ps1` | 게임 창 위치 추적 (Windows 창 조회만) |
+| `src/renderer.js` `src/index.html` `src/style.css` | 목록 화면 |
+| `src/tip.js` `src/tip.html` | 툴팁 창 |
+| `src/authors-*` | 차단·메모 관리 창과 그 목록 |
+| `src/notice.html` | 이용 안내 (판 번호는 `notice-version`) |
+| `src/preload.js` | 화면 ↔ 본체 연결 |
+| `src/shared/` | 주간 납품 위젯와 같은 파일(바이트까지 같음 — 고치면 둘 다): 업데이트(`updater.js` · `apply-update.ps1` · `update-*`), 이용 안내(`consent.js` · `notice.js` · `notice.css`), ☰ 메뉴(`ctxmenu.js` · `menu-*`), 알림 창(`toast-*`), ☰ 끌기 위치 옮기기(`dock.js` · `guide-*`), 마우스 판정(`hitpoll.js` · `hitrects.js`), 잠금(`lock*`), 트레이 상태, 게임 창이 없을 때(`nogame.js`), 부팅 시 자동 실행(`autostart.js`) |
+| `assets/` | 아이콘 · 트레이 아이콘 · 작성자 표시(`author-icons/`) · 새 망호 소리(`sounds/` — 파도 transitking(Freesound 11505) · 갈매기 Lydmakeren(Freesound 510917), 둘 다 CC0, `sounds/LICENSE.txt`) |
 | `망호 스캐너.bat` | 실행 (첫 실행 시 Electron 설치) |
-| `updater.js` · `apply-update.ps1` | 업데이트 확인·서명 검증·교체·되돌리기 (주간 납품 위젯과 같은 파일) |
-| `nogame.js` · `autostart.js` | 게임 창이 없을 때 · 부팅 시 자동 실행 (주간 납품 위젯과 같은 파일) |
 | `scripts/build_dist.py` · `scripts/build_exe.js` | 배포본 만들기 (개발용): exe 빌드(@electron/packager) → zip. `npm install` 후 `python scripts/build_dist.py`, 릴리스 파일은 `--release`(먼저 `npm test`, 실패하면 만들지 않음) |
-| `test/` | 시험 (개발용, 배포본에 들어가지 않음): `npm test` — 단위 시험(node)과 화면 밖 페이지 시험(Electron, 화면에 창을 띄우지 않음) |
+| `test/` | 시험 (개발용, 배포본에 들어가지 않음): `npm test` — 단위 시험(node)과 화면 밖 페이지 시험(Electron, 화면에 창을 띄우지 않음; 실제 프로그램의 모든 창도 화면 밖에서 열어 봄).
+  업데이트 시험: `npm run test:update -- --from <옛 판 full.zip> [--rollback-from <옛 판 full.zip>]` — 옛 판이 자기 업데이터로 이 트리를 설치하고 다시 시작하는지(되돌리기 포함), 임시 폴더에서 모든 것을 격리해서(설정·창·네트워크) |
 
 변경 이력은 [CHANGELOG.md](CHANGELOG.md).

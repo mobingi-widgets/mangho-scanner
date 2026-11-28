@@ -14,17 +14,21 @@ const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, shell, cli
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
+// the program's folders: src/ (this file and the program's own pages), src/shared/ (the copies every overlay
+// shares), assets/ (icons, sounds), the program root above them (package.json, docs/, node_modules)
+const ROOT = path.join(__dirname, '..');
+const ASSETS = path.join(ROOT, 'assets');
 const scanner = require('./scanner');
-const dockLib = require('./dock');
-const ctxLib = require('./ctxmenu');
-const updater = require('./updater');
-const consent = require('./consent');
-const toastLib = require('./toast-ui');
-const hitpoll = require('./hitpoll');
-const lockLib = require('./lock');
-const trayState = require('./tray-state');
-const nogameLib = require('./nogame');
-const autostartLib = require('./autostart');
+const dockLib = require('./shared/dock');
+const ctxLib = require('./shared/ctxmenu');
+const updater = require('./shared/updater');
+const consent = require('./shared/consent');
+const toastLib = require('./shared/toast-ui');
+const hitpoll = require('./shared/hitpoll');
+const lockLib = require('./shared/lock');
+const trayState = require('./shared/tray-state');
+const nogameLib = require('./shared/nogame');
+const autostartLib = require('./shared/autostart');
 const authorsLib = require('./authors-store');
 const authorsUiLib = require('./authors-ui');
 
@@ -40,8 +44,8 @@ let starting = true;                   // the notice may be the only window for 
 // of the built exe; a source run (npm start) only reports.
 let uui = null;
 function makeUpdateUi() {
-  return require('./update-ui').create({
-    dir: __dirname, repo: 'mangho-scanner', app: 'mangho-scanner', version: app.getVersion(), title: '망호 스캐너',
+  return require('./shared/update-ui').create({
+    dir: ASSETS, repo: 'mangho-scanner', app: 'mangho-scanner', version: app.getVersion(), title: '망호 스캐너',
     userData: app.getPath('userData'),
     canInstall: () => app.isPackaged,
     stageRoot: () => path.join(process.resourcesPath, '.update'),
@@ -991,7 +995,7 @@ function menuAct(id, opt) {
     case 'text': saveCfg({ text: stepped(opt, TEXT, cfg.text) }); toPage(windowState()); return true;
     case 'lockshrink': saveCfg({ lockShrink: opt === 'on' ? true : opt === 'tile' ? 'tile' : false }); place(); toPage(windowState()); return true;
     case 'opacity': setOpacity(Number(opt)); return true;
-    case 'notice': consent.ask({ dir: __dirname, title: NOTICE_TITLE, mode: 'view', zoom: baseZoom, avoid: overlayRects }); return false;
+    case 'notice': consent.ask({ dir: __dirname, iconDir: ASSETS, title: NOTICE_TITLE, mode: 'view', zoom: baseZoom, avoid: overlayRects }); return false;
     case 'quit': app.quit(); return false;
     default: return false;
   }
@@ -1007,7 +1011,7 @@ function openMenu(build, act) {
   if (!win || win.isDestroyed()) return;
   tipAnchor = null;
   placeTip();
-  if (!ctx) ctx = ctxLib.create({ dir: __dirname });
+  if (!ctx) ctx = ctxLib.create();
   const p = screen.getCursorScreenPoint();
   toPage({ type: 'menu', open: true });
   ctx.open({
@@ -1076,7 +1080,7 @@ function createWindow() {
     hasShadow: false, resizable: false,
     focusable: false,          // never take keyboard focus away from the game
     skipTaskbar: true, alwaysOnTop: true, title: '망호 스캐너',
-    icon: path.join(__dirname, 'icon.png'),
+    icon: path.join(ASSETS, 'icon.png'),
     // 새 망호 소리 plays from this page with no click on it (the game has the mouse) - also while hidden
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true,
       autoplayPolicy: 'no-user-gesture-required' },
@@ -1104,8 +1108,8 @@ function createWindow() {
 }
 
 function createTray() {
-  tray = new Tray(nativeImage.createFromPath(path.join(__dirname, 'tray.png')));
-  trayUi = trayState.create({ tray, dir: __dirname, name: '망호 스캐너' });
+  tray = new Tray(nativeImage.createFromPath(path.join(ASSETS, 'tray.png')));
+  trayUi = trayState.create({ tray, dir: ASSETS, name: '망호 스캐너' });
   updateTray();
   tray.on('click', trayClick);
   tray.on('right-click', () => tray.popUpContextMenu(buildMenu()));
@@ -1136,14 +1140,14 @@ async function demoShots() {
     fs.writeFileSync(path.join(DEMO, `${name}.png`), (await w.webContents.capturePage()).toPNG());
   };
   // a menu as it would open at this zoom, drawn offscreen (no pointer, so no hover in it either)
-  const saveMenu = async (items, name) => fs.writeFileSync(path.join(DEMO, `${name}.png`), await ctxLib.shot({ dir: __dirname, items, zoom }));
+  const saveMenu = async (items, name) => fs.writeFileSync(path.join(DEMO, `${name}.png`), await ctxLib.shot({ items, zoom }));
   const js = (code) => win.webContents.executeJavaScript(code);
   // start once the page has loaded (its feed handler listens): a message sent before that is lost,
   // and one overview came out '읽는 중…' (2026-11-27)
   if (win.webContents.isLoading()) await new Promise((r) => win.webContents.once('did-finish-load', r));
   const hasSnap = () => js("typeof snap !== 'undefined' && !!snap").catch(() => false);
   fs.mkdirSync(DEMO, { recursive: true });
-  const fx = JSON.parse(fs.readFileSync(path.join(__dirname, 'docs', 'demo-posts.json'), 'utf8'));
+  const fx = JSON.parse(fs.readFileSync(path.join(ROOT, 'docs', 'demo-posts.json'), 'utf8'));
   const now = Date.now();
   const posts = fx.posts.map((p) => ({
     roles: null, roleText: null, kindRule: null, kindMatch: null, ip: '', authorLast: null, firstSeen: 0, url: '',
@@ -1274,7 +1278,7 @@ async function demoShots() {
   }
   if (ctx) console.warn('demo: a real menu (and its click catcher) was opened');
   process.env.NOTICE_SHOT = path.join(DEMO, 'notice.png');
-  await consent.ask({ dir: __dirname, title: NOTICE_TITLE });
+  await consent.ask({ dir: __dirname, iconDir: ASSETS, title: NOTICE_TITLE });
   app.quit();
 }
 
@@ -1473,7 +1477,7 @@ if (!app.requestSingleInstanceLock()) {
       // started fine (an update waiting on update-ok.json must not roll back while the notice is read)
       const onShown = () => updater.markHealthy(path.join(app.getPath('userData'), 'update-ok.json'), app.getVersion());
       // seen: an agreement to an older edition -> what changed since is marked, 달라진 점만 보기 (notice.js)
-      const answer = await consent.ask({ dir: __dirname, title: NOTICE_TITLE, mode: guard ? 'guard' : 'ask', onShown, zoom: cfg.scale / 100, seen: cfg.notice || 0 });
+      const answer = await consent.ask({ dir: __dirname, iconDir: ASSETS, title: NOTICE_TITLE, mode: guard ? 'guard' : 'ask', onShown, zoom: cfg.scale / 100, seen: cfg.notice || 0 });
       if (answer === 'rollback') { uui.rollback(); return; }
       if (answer !== true) { app.quit(); return; }
       saveCfg({ notice: noticeV, noticeAt: new Date().toISOString(), noticeDeclined: null });
@@ -1525,7 +1529,7 @@ if (!app.requestSingleInstanceLock()) {
       },
     });
     toast = toastLib.create({
-      dir: __dirname, title: '망호 스캐너 알림', source: '스캐너',
+      title: '망호 스캐너 알림', source: '스캐너',
       settings: () => cfg.toast, save: (p) => saveCfg({ toast: { ...cfg.toast, ...p } }),
       gameRect: gameRectDip, gameVisible, zoom: () => baseZoom, always: !!SHOT || !!DEMO,
     });

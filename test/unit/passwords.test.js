@@ -1,6 +1,6 @@
 // the password lines (the new word 암구호 and the old ones)
 const { ROOT } = require('./../lib/env');
-const { passwordIn } = require(require('path').join(ROOT, 'scanner.js'));
+const { passwordIn } = require(require('path').join(ROOT, 'src', 'scanner.js'));
 const cases = [
   // new: 암구호 (user 2026-11-27)
   ['암구호 : 고래밥', { value: '고래밥' }],

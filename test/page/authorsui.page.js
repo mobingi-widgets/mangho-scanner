@@ -16,7 +16,7 @@ app.disableHardwareAcceleration();
 app.whenReady().then(async () => {
   fs.mkdirSync(out, { recursive: true });
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'authorsui-'));
-  const S = require(path.join(dir, 'authors-store.js'));
+  const S = require(path.join(dir, 'src', 'authors-store.js'));
   const store = S.create({ file: path.join(tmp, 'authors.json') });
   // made-up writers (README-style fake data)
   store.set({ kind: 'uid', key: 'whale01' }, { member: 'fixed', nick: '데모고래', memo: '인게임: 고래밥', hidden: false });
@@ -24,8 +24,8 @@ app.whenReady().then(async () => {
   store.set({ kind: 'ip', key: '10.2' }, { member: 'guest', nick: 'ㅇㅇ', memo: '아침 파티 그분' });
   const importFile = path.join(tmp, 'import.json');
   fs.writeFileSync(importFile, JSON.stringify({ entries: [{ kind: 'uid', key: 'diver55', nick: '잠수부', memo: '잠수 파티장' }, { kind: 'uid', key: 'whale01', hidden: true }] }));
-  const ui = require(path.join(dir, 'authors-ui.js')).create({
-    dir, store, title: '망호 스캐너', zoom: () => Number(process.env.ZOOM || 1), near: () => null,
+  const ui = require(path.join(dir, 'src', 'authors-ui.js')).create({
+    dir: path.join(dir, 'src'), store, title: '망호 스캐너', zoom: () => Number(process.env.ZOOM || 1), near: () => null,
     test: { exportFile: path.join(tmp, '내보낸 목록.json'), importFile },
   });
   try {

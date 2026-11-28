@@ -860,7 +860,7 @@ function playSound(d) {
   if (d.stop) { if (sfx) sfx.pause(); window.__sound = { at: Date.now(), result: 'stopped' }; return; }
   const gain = Number(d.gain);
   if (!(gain > 0)) return;                       // 음소거: nothing
-  if (!sfx) sfx = new Audio('sounds/new-mangho.ogg');
+  if (!sfx) sfx = new Audio('../assets/sounds/new-mangho.ogg');
   sfx.volume = Math.min(1, gain);
   sfx.currentTime = 0;
   const at = Date.now();

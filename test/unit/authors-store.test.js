@@ -5,7 +5,7 @@ const os = require('os');
 const path = require('path');
 
 const { ROOT } = require('../lib/env');
-const S = require(path.join(ROOT, 'authors-store.js'));
+const S = require(path.join(ROOT, 'src', 'authors-store.js'));
 let ok = true;
 const check = (what, cond, extra = '') => { console.log(`${cond ? 'ok  ' : 'FAIL'} ${what}${extra ? `  (${extra})` : ''}`); if (!cond) ok = false; };
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'authorstore-'));

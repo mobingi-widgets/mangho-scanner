@@ -136,12 +136,12 @@ body.show-nick .nick { display: flex; }
 .nick .mi { flex: none; align-self: center; width: 10px; height: 10px; margin-right: 3px; background: var(--glyph) center / contain no-repeat; }
 .post.rolex .mi { opacity: .76; }
 .post.gone .mi, .post.a20 .mi { opacity: .63; }
-.mi.fixed { --glyph: url("author-icons/fixed.svg"); }
-.mi.semi { --glyph: url("author-icons/semi.svg"); }
-.mi.new-fixed { --glyph: url("author-icons/new-fixed.svg"); }
-.mi.new-semi { --glyph: url("author-icons/new-semi.svg"); }
-.mi.manager { --glyph: url("author-icons/manager.svg"); }
-.mi.deputy { --glyph: url("author-icons/deputy.svg"); }
+.mi.fixed { --glyph: url("../assets/author-icons/fixed.svg"); }
+.mi.semi { --glyph: url("../assets/author-icons/semi.svg"); }
+.mi.new-fixed { --glyph: url("../assets/author-icons/new-fixed.svg"); }
+.mi.new-semi { --glyph: url("../assets/author-icons/new-semi.svg"); }
+.mi.manager { --glyph: url("../assets/author-icons/manager.svg"); }
+.mi.deputy { --glyph: url("../assets/author-icons/deputy.svg"); }
 
 /* The two size bars (user 2026-11-27) are a pair: a faint 3px line in its own strip outside the
    content (8px beside it, 9px under it), 3px off it, yellow while hovered or dragged. Only the line and a little around it

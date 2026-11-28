@@ -3,10 +3,10 @@
   "version": "1.13.0",
   "private": true,
   "description": "망호 스캐너 — 에반(마비노기 모바일) 갤러리 망호 말머리 오버레이 (읽기 전용)",
-  "main": "main.js",
+  "main": "src/main.js",
   "scripts": {
     "start": "electron .",
-    "scan": "node scanner.js",
+    "scan": "node src/scanner.js",
     "test": "node test/run.js"
   },
   "devDependencies": {

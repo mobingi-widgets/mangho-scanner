@@ -10,7 +10,7 @@ let ok = true;
 const check = (what, cond, extra = '') => { console.log(`${cond ? 'ok  ' : 'FAIL'} ${what}${extra ? `  (${extra})` : ''}`); if (!cond) ok = false; };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const src = fs.readFileSync(path.join(dir, 'main.js'), 'utf8');
+const src = fs.readFileSync(path.join(dir, 'src', 'main.js'), 'utf8');
 const block = (src.match(/\r?\napp\.on\('web-contents-created',[\s\S]*?\r?\n\}\);\r?\n/) || [])[0];
 check('main.js has the guard at top level', !!block);
 // eslint-disable-next-line no-new-func
@@ -24,7 +24,7 @@ app.whenReady().then(async () => {
   const { session } = require('electron');
   session.defaultSession.webRequest.onBeforeRequest((d, cb) => { if (!d.url.startsWith('file:') && !d.url.startsWith('data:') && !d.url.startsWith('devtools:')) requests.push(d.url); cb({}); });
   const w = new BrowserWindow({ width: 400, height: 300, show: false, webPreferences: { offscreen: true, sandbox: true, contextIsolation: true } });
-  await w.loadFile(path.join(dir, 'authors.html'), { hash: 'confirm=1.2' });
+  await w.loadFile(path.join(dir, 'src', 'authors.html'), { hash: 'confirm=1.2' });
   const url0 = w.webContents.getURL();
   check('loadFile with a hash loads (our windows)', url0.startsWith('file:') && url0.endsWith('#confirm=1.2'), url0);
   const js = (c) => w.webContents.executeJavaScript(c, true);

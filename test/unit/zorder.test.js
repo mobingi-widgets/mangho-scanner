@@ -49,7 +49,7 @@ const fakeElectron = {
 const realLoad = Module._load;
 Module._load = function (req, ...rest) { return req === 'electron' ? fakeElectron : realLoad.call(this, req, ...rest); };
 
-const ui = require(path.join(dir, 'authors-ui.js'));
+const ui = require(path.join(dir, 'src', 'authors-ui.js'));
 const { besideRect } = ui;
 
 // ---- placement maths (DIP): a 1920 x 1040 work area, the overlay 300 wide
@@ -103,7 +103,7 @@ ovl.visible = true;
 const tip = new FakeWin({ title: 'tooltip', width: 200, height: 40 });
 const toastWin = new FakeWin({ title: 'toast', width: 340, height: 60 });
 const st = { ctxOpen: false, tipUp: false, toastUp: false };
-const { api } = load(path.join(dir, 'main.js'), ['raise'], {
+const { api } = load(path.join(dir, 'src', 'main.js'), ['raise'], {
   win: ovl, appMode: false, ctx: { isOpen: () => st.ctxOpen }, authorsUi: auth, tipWin: tip,
   toast: { window: () => toastWin }, uui: null, consent: { keepTop: () => false },
 });

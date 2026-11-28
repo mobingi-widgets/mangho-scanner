@@ -20,7 +20,7 @@ app.on('window-all-closed', () => {});   // shot() destroys its window: the only
 process.on('unhandledRejection', (e) => { console.log('FAIL rejection', e && e.stack); app.exit(1); });
 app.whenReady().then(async () => {
   fs.mkdirSync(out, { recursive: true });
-  const authorsLib = require(path.join(dir, 'authors-store.js'));
+  const authorsLib = require(path.join(dir, 'src', 'authors-store.js'));
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'who181-'));
   const authors = authorsLib.create({ file: path.join(tmp, 'authors.json') });
   const noop = () => {};
@@ -37,7 +37,7 @@ app.whenReady().then(async () => {
     actions: [{ id: 'upd-check', text: '↻', label: '업데이트 확인', tip: '지금 확인 · 3분 전 확인' }],
     toggle: { id: 'upd-auto', label: '자동', long: '자동 업데이트 확인', on: true, tip: '켤 때와 6시간마다 확인' } }] };
   const now = Date.now();
-  const { api } = load(path.join(dir, 'main.js'), ['whoOf', 'writerCopy', 'postMenuItems', 'authorOf', 'menuItems', 'roleMenuItems', 'ago', 'ROLE_NAME', 'SCALE', 'TEXT', ...(require('fs').readFileSync(path.join(dir, 'main.js'), 'utf8').includes('const SOUND_VOL') ? ['SOUND_VOL'] : [])], {
+  const { api } = load(path.join(dir, 'src', 'main.js'), ['whoOf', 'writerCopy', 'postMenuItems', 'authorOf', 'menuItems', 'roleMenuItems', 'ago', 'ROLE_NAME', 'SCALE', 'TEXT', ...(require('fs').readFileSync(path.join(dir, 'src', 'main.js'), 'utf8').includes('const SOUND_VOL') ? ['SOUND_VOL'] : [])], {
     authors, authorsLib, copyPost: noop, blockWriter: noop, authorsUi: { open: noop }, shell: { openExternal: noop },
     problems: () => [], scan: { okAt: now - 19000, nextAt: now + 41000 }, state: { src: { name: '에반' } }, appMode: false,
     cfg: { show: 'always', subs: 'show', nickMode: 'nick', scale: 100, text: 100, opacity: 1, role: 'all' }, toast, uui, lock: null,
@@ -67,14 +67,14 @@ app.whenReady().then(async () => {
   check('유동 menu (blocked band)', JSON.stringify(L.guest) === JSON.stringify(['닉네임 복사하기 · ㅇㅇ', 'ㅇㅇ(10.88) 대역 차단 해제', 'ㅇㅇ(10.88) 대역 메모 쓰기', '글 열기']), JSON.stringify(L.guest));
   check('닉네임 복사 still copies the nick only', L.semi[0] === '닉네임 복사하기 · 예시닉');
   // the result toast's text (blockWriter): the same name
-  const src = fs.readFileSync(path.join(dir, 'main.js'), 'utf8');
+  const src = fs.readFileSync(path.join(dir, 'src', 'main.js'), 'utf8');
   check('result toast uses whoOf', /text: `\$\{whoOf\(p\)\} — \$\{on \? '차단했습니다' : '차단을 해제했습니다'\}`/.test(src));
 
   // the hint strip: read back from the real menu page (offscreen), per menu - and again after a
   // redraw with another shape (the page decides on every draw)
   const page = new BrowserWindow({ width: 300, height: 700, show: false, frame: false, transparent: true,
-    webPreferences: { offscreen: true, preload: path.join(dir, 'menu-preload.js'), contextIsolation: true, sandbox: true } });
-  await page.loadFile(path.join(dir, 'menu.html'));
+    webPreferences: { offscreen: true, preload: path.join(dir, 'src', 'shared', 'menu-preload.js'), contextIsolation: true, sandbox: true } });
+  await page.loadFile(path.join(dir, 'src', 'shared', 'menu.html'));
   const strip = async (items) => {
     page.webContents.send('menu', items);
     await wait(250);
@@ -97,7 +97,7 @@ app.whenReady().then(async () => {
   check('an option tip alone keeps the strip', !optTip.hidden, JSON.stringify(optTip));
   page.destroy();
 
-  const { shot } = require(path.join(dir, 'ctxmenu.js'));
+  const { shot } = require(path.join(dir, 'src', 'shared', 'ctxmenu.js'));
   for (const [name, items] of [['menu-fixed', menus.fixed], ['menu-semi', menus.semi], ['menu-guest', menus.guest], ['menu-main', menus.main], ['menu-role', menus.role]]) {
     fs.writeFileSync(path.join(out, `${name}.png`), await shot({ dir, items, zoom: 1.5 }));
   }

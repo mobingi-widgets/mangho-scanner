@@ -41,6 +41,7 @@ HERE = os.path.dirname(SCRIPTS)            # the app (this file is in its script
 WORKSPACE = os.path.dirname(HERE)
 NAME = "망호 스캐너"
 APP_ID = "mangho-scanner"
+SIBLING = "scroll-widget"            # the other overlay: src/shared/ must match it
 KEY_LIKE = re.compile(r"(\.pem$|\.key$|minisign|\.credentials)", re.I)
 TEXT_EXT = (".js", ".html", ".css", ".json", ".md", ".py", ".ps1", ".bat", ".txt")
 
@@ -82,7 +83,7 @@ def changelog_notes(ver):
 
 def notice_version():
     """<meta name="notice-version" content="N"> in notice.html - the one place the notice's version is set."""
-    m = re.search(r'<meta\s+name="notice-version"\s+content="(\d+)"', open(os.path.join(HERE, "notice.html"), encoding="utf-8").read())
+    m = re.search(r'<meta\s+name="notice-version"\s+content="(\d+)"', open(os.path.join(HERE, "src", "notice.html"), encoding="utf-8").read())
     if not m:
         raise SystemExit("notice.html에 notice-version이 없음")
     return int(m.group(1))
@@ -90,7 +91,7 @@ def notice_version():
 
 def make_icon():
     from PIL import Image
-    src = Image.open(os.path.join(HERE, "icon.png")).convert("RGBA")
+    src = Image.open(os.path.join(HERE, "assets", "icon.png")).convert("RGBA")
     src.save(os.path.join(HERE, "icon.ico"), sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
 
 
@@ -110,9 +111,11 @@ def build_app(build):
         if n not in ("ko.pak", "en-US.pak"):
             os.remove(os.path.join(loc, n))
     shutil.rmtree(os.path.join(app, "resources", "app", "node_modules"), ignore_errors=True)
-    for need in (NAME + ".exe", os.path.join("resources", "app", "gamewin.ps1"), os.path.join("resources", "app", "main.js"),
-                 os.path.join("resources", "app", "updater.js"), os.path.join("resources", "app", "blake2b.js"),
-                 os.path.join("resources", "app", "apply-update.ps1"), os.path.join("resources", "app", "toast-ui.js")):
+    need = [NAME + ".exe"] + [os.path.join("resources", "app", *p.split("/")) for p in (
+        "package.json", "src/main.js", "src/gamewin.ps1", "src/index.html", "src/notice.html", "assets/icon.png", "assets/tray.png",
+        "src/shared/updater.js", "src/shared/blake2b.js", "src/shared/apply-update.ps1", "src/shared/toast-ui.js",
+        "src/shared/notice.css", "src/shared/notice.js")]
+    for need in need:
         if not os.path.exists(os.path.join(app, need)):
             raise SystemExit("빌드 결과에 %s 없음: %s" % (need, app))
     for never in ("test", "scripts"):          # tests and dev tools never ship (build_exe.js leaves them out)
@@ -165,10 +168,45 @@ def electron_selftest(files):
     js = ("const u = require(process.argv[1]), fs = require('fs'), p = require('path');"
           "for (const f of process.argv.slice(2)) u.verifyMinisig(fs.readFileSync(f), fs.readFileSync(f + '.minisig', 'utf8'), p.basename(f));"
           "console.log('verified ' + (process.argv.length - 2) + ' in electron ' + process.versions.electron)")
-    run = subprocess.run([exe, "-e", js, os.path.join(HERE, "updater.js"), *files], capture_output=True, text=True,
+    run = subprocess.run([exe, "-e", js, os.path.join(HERE, "src", "shared", "updater.js"), *files], capture_output=True, text=True,
                          encoding="utf-8", env=dict(os.environ, ELECTRON_RUN_AS_NODE="1"))
     out = (run.stdout + run.stderr).strip()
     return run.returncode == 0 and "verified" in run.stdout, out[-800:]
+
+
+def shared_diff():
+    """src/shared/ holds the copies every overlay shares: byte for byte the same as the other program's (the
+    workspace keeps both side by side). -> the differences, [] when none; None without the other program beside
+    this one (nothing to compare)."""
+    other = os.path.join(WORKSPACE, SIBLING, "src", "shared")
+    if not os.path.isdir(other):
+        return None
+
+    def listing(top):
+        out = {}
+        for base, _dirs, names in os.walk(top):
+            for n in names:
+                full = os.path.join(base, n)
+                with open(full, "rb") as fh:
+                    out[os.path.relpath(full, top).replace(os.sep, "/")] = fh.read()
+        return out
+
+    a, b = listing(os.path.join(HERE, "src", "shared")), listing(other)
+    return ["%s: %s" % (n, "여기만 있음" if n not in b else "저쪽만 있음" if n not in a else "내용 다름")
+            for n in sorted(set(a) | set(b)) if a.get(n) != b.get(n)]
+
+
+def not_ascii():
+    """.bat (cmd) and .ps1 (Windows PowerShell 5.1) are read in the system code page: ASCII only, wherever they are."""
+    bad = []
+    for base, dirs, names in os.walk(HERE):
+        dirs[:] = [d for d in dirs if d not in ("node_modules", "dist", "out") and not d.startswith(".")]
+        for n in names:
+            if n.endswith((".bat", ".ps1")):
+                with open(os.path.join(base, n), "rb") as fh:
+                    if any(b > 127 for b in fh.read()):
+                        bad.append(os.path.relpath(os.path.join(base, n), HERE))
+    return bad
 
 
 def run_tests():
@@ -181,11 +219,16 @@ def run_tests():
 def main(argv):
     release = "--release" in argv
     out_root = argv[argv.index("--out") + 1] if "--out" in argv else os.path.join(WORKSPACE, "dist")
-    # cmd reads .bat / PowerShell 5.1 reads .ps1 in the system code page
-    for n in os.listdir(HERE):
-        if n.endswith((".bat", ".ps1")) and any(b > 127 for b in open(os.path.join(HERE, n), "rb").read()):
-            print("ASCII가 아닌 글자가 있어 만들지 않음: %s" % n)
-            return 1
+    bad = not_ascii()
+    if bad:
+        print("ASCII가 아닌 글자가 있어 만들지 않음: %s" % ", ".join(bad))
+        return 1
+    diff = shared_diff()
+    if diff:
+        print("src/shared/가 %s의 것과 달라 만들지 않음 (공통 사본은 두 프로그램에 똑같이):\n  %s" % (SIBLING, "\n  ".join(diff)))
+        return 1
+    if diff is None:
+        print("  (src/shared/: 옆에 %s가 없어 비교하지 않음)" % SIBLING)
     if not os.path.exists(os.path.join(HERE, "node_modules", "@electron", "packager")):
         print("먼저 npm install (devDependencies의 @electron/packager 필요)")
         return 1
@@ -228,7 +271,7 @@ def main(argv):
     # the notice (이용 안내) of this version: shown before the download when its version went up
     nver = notice_version()
     notice = os.path.join(rel, "%s-notice-%d.html" % (APP_ID, nver))
-    shutil.copyfile(os.path.join(HERE, "notice.html"), notice)
+    shutil.copyfile(os.path.join(HERE, "src", "notice.html"), notice)
     feed = {
         "schema": 1, "app": APP_ID, "version": ver,
         "pub_date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
