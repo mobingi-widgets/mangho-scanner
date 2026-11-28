@@ -26,6 +26,19 @@ const CASES = [   // 운영담당's list, as given (title or comment: the rule i
 ];
 for (const [s, want] of CASES) { const got = cw(s); check(`case  ${s}  -> ${want}`, got === want, `got ${got}`); }
 
+// ---------------------------------------------------------------- 1b. 출 alone, 출항 / 출발 with a mark (2026-11-28; made-up look-alikes)
+const CHUL = [
+  ['밤 산책 망오(출)', 'title', '출'], ['3회차 정박 산책 망오(출)', 'title', '출'], ['물길 망호 -출-', 'title', '출'], ['스카스 4인 / 출', 'title', '출'],
+  ['출) 동굴 망호', 'title', '출'], ['출', 'comment', '출'],
+  ['정박지 망호 아무나 (5트째) 출~항', 'title', '출항'], ['물길 산책 출.항', 'title', '출항'], ['스카스 산책 출·항', 'title', '출항'],
+  ['동굴 망호 출 항', 'title', '출항'], ['지4 출~발', 'title', '출발'], ['출~~항!', 'comment', '출항'],
+  // still not closing: 출 inside a word, the exceptions, a syllable before the mark
+  ['출석 체크 망호', 'title', null], ['출근 전 스카스', 'title', null], ['출시 기념 망호', 'title', null], ['외출 발표 전 한판', 'title', null],
+  ['정박 망호 출~발못하고 있어요', 'title', null], ['수리하고 재출~발', 'title', null], ['수리하고 재출~발', 'comment', '출발'],
+  ['출석부 (출)', 'title', '출'],
+];
+for (const [s, from, want] of CHUL) { const got = cw(s, from); check(`출  ${s} [${from}]  -> ${want}`, got === want, `got ${got}`); }
+
 const MORE = [
   // the must-not list of the message, as comments
   ['3번째 완료 다시팜 오셈', 'comment', null], ['2번째 완료 들어와 다시팠어', 'comment', null], ['5번째 완료 ㄱㄱㄱㄱ 신청 ㄱㄱㄱ', 'comment', null],

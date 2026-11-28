@@ -523,11 +523,13 @@ function liveUntil(title, t, kind) {
 // titles of the 망호 tab 10.29..11.27 and the author comments of 200 posts: 출항 / 출발 alone left
 // 109 closed titles and 21 posts closed by a comment showing as 모집 중).
 //  - anywhere (as part of any word): 출항 · 출발 · 마감 · 종료, except
+//      (출항 / 출발 also with a mark inside, 2026-11-28 - "… 출~항": 출~항 · 출.항 · 출·항 · 출 항, not right after
+//      a syllable - "외출 발표" is no 출발)
 //      마감 / 종료 right after a time - an end time: "아침 09:00 마감!", "10시 종료", "13시 종료 예정"
 //        (출항 after a time is still a departure: "~9시 한명 출항", "10시까지! 출항");
 //      출발못 / 출항못 - it could not leave;
 //      재출발 / 재출항 in a title - a later plan ("10시 수리 한번 하고 재출발"); in a comment it left again.
-//  - standing alone only: 완 · 완료 · 풀 · 풀방 · 펑 · 침몰 · 끝 · 취소 · ㅊㅎ -
+//  - standing alone only: 완 · 완료 · 풀 · 풀방 · 펑 · 침몰 · 끝 · 취소 · ㅊㅎ · 출 (2026-11-28: "…망오(출)") -
 //      a bracket that ends with it: (완) [마감] (침몰!!) (취소할게) [사람안구해서펑..] -완료- -안와서 펑-;
 //      the end of the text after a space, "/" or "...": "스카스 침몰", "8시까지 정박지 7200+ 완", a comment "완";
 //      the start before a bracket: "완)물길 망호".
@@ -536,7 +538,7 @@ function liveUntil(title, t, kind) {
 //  - a 디시콘 whose name has 출항 · 출발 · 침몰 · 펑 (the 출항티콘, 망호펑), or whose image is a known
 //    closing one (DCCON_IMAGES: 모비에반콘 24 출항, 45 침몰).
 // source.keywords: more words that count anywhere, on top of these (before 1.12.0 the whole list).
-const CLOSE_ANY_RE = /출항|출발|마감|종료/g;
+const CLOSE_ANY_RE = /(?:(?<![가-힣])|(?<=재))출[~.·\s]{1,2}[항발]|출항|출발|마감|종료/g;     // (재: 재출~발 - the 재출발 rule below)
 const CLOSE_ANY = ['출항', '출발', '마감', '종료'];
 const CLOSE_DCCON = ['출항', '출발', '침몰', '펑'];
 // 디시콘 known by their image, not their name (user 2026-11-28): a comment's 디시콘 is named by its number in
@@ -554,7 +556,7 @@ const DCCON_IMAGES = new Map([
   { pack: '모비에반콘', package: 176258, num: 45, idx: 7560834, word: '침몰',
     path: '62b5df2be09d3ca567b1c5bc12d46b394aa3b1058c6e4d0ca41648b658e82474e6016f3e758418c2727d74f8eb7df3b8d266e6597ca0e40e483fc093f90ef1ea77cb063005c82e6bf9fd7bd68b5507c30aba9194f9446ea2' },
 ].map((d) => [d.path, d]));
-const ALONE = '완료|완|풀방|풀|펑|침몰|끝|취소|ㅊㅎ';         // the longer first
+const ALONE = '완료|완|풀방|풀|펑|침몰|끝|취소|ㅊㅎ|출';      // the longer first (출: not 출석 · 출근 - it has to stand alone)
 const ALONE_TAIL = '(?:할게요?|합니다|됨|됐(?:음|어요?)|했(?:음|어요?)|함|임|요)?';   // (취소할게), 펑함
 const ALONE_MARK = '[\\s.,~!…ㅠㅜㅋ^]*';                    // 완~!  침몰!!  펑..  펑ㅠㅠ
 const ALONE_RES = [
@@ -576,10 +578,10 @@ function closingWord(text, from, extra = []) {
   const s = String(text || '').replace(/\s*-\s*dc App\s*$/i, '').trim();     // the app's signature
   if (!s) return null;
   for (const m of s.matchAll(CLOSE_ANY_RE)) {
-    const w = m[0];
+    const w = m[0].length > 2 ? `출${m[0].slice(-1)}` : m[0];     // 출~항 -> 출항
     const before = s.slice(0, m.index);
     if ((w === '마감' || w === '종료') && TIME_BEFORE_RE.test(before)) continue;
-    if ((w === '출항' || w === '출발') && /^\s*못/.test(s.slice(m.index + w.length))) continue;
+    if ((w === '출항' || w === '출발') && /^\s*못/.test(s.slice(m.index + m[0].length))) continue;
     if ((w === '출항' || w === '출발') && from === 'title' && /재\s?$/.test(before)) continue;
     return w;
   }
