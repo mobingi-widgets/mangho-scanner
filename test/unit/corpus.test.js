@@ -4,7 +4,8 @@
 // and invite codes masked); else it says so and passes. Every record: the password (passwordFind) and the closing
 // word (closingWord over the title and the author's comments, dcconWord over their 디시콘), counted.
 // MANGHO_CORPUS_LABELS = a JSON { "<no>": { "pw": "<password>" | null, "closed": "<word>" | null } } of confirmed
-// answers: any record that disagrees fails the suite (only the fields a label gives are compared).
+// answers: any record that disagrees fails the suite (only the fields a label gives are compared; keys starting
+// with _ are notes).
 // No corpus data ever goes into the repository.
 'use strict';
 const fs = require('fs');
@@ -64,6 +65,7 @@ if (labelsFile && fs.existsSync(labelsFile)) {
   const wrong = [];
   let n = 0;
   for (const [no, want] of Object.entries(labels)) {
+    if (no.startsWith('_')) continue;                 // a note in the file (_about), not a post
     const have = got.get(String(no));
     if (!have) { wrong.push(`${no}: not in the corpus`); continue; }
     n += 1;

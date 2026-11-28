@@ -312,7 +312,47 @@ const PW_ASK_RE = /^(?:귓|댓글|쪽지|dm|디엠|문의)/i;                   
 const PW_MAX = 40;
 
 // -> { value, from, line } | { value: null, ask: true, from, line } | { none: true } | null
+// The body and the author's comments (user 2026-11-28, from 운영담당's check on 300 recent posts: 2 answers changed,
+// both right; titles as before). A chat line mentioning 비번 mid-sentence ("…비번 말 안하는사람이 많아서…") was
+// taken for the password and won over the body's. Now:
+//  - a change word may stand between the keyword and the rest: "비번 바꿈 : 새고래";
+//  - strong = 은/는 after the keyword, or a separator (: ： = -> → > -); at the start = nothing but marks or digits
+//    before the keyword on its line ("★암호 7시", "1. 암호 : 고래");
+//  - neither strong nor at the start: not a password line - the next lines are still read;
+//  - the next line as the value (the keyword alone on its line) only when strong or at the start;
+//  - "암호 없음" / "암호 귓" as before (they come first);
+//  - not strong and several words after it: a comment's is chat - skipped; the body's first word is taken
+//    ("암호 고래아님 아무나와" -> 고래아님);
+//  - not strong and longer than PW_BARE_MAX: skipped.
+const PW_LINE_RE = new RegExp('(?:암구호|암호명?|비번|비밀\\s*번호)(?:\\s*(?:바꿈|바뀜|변경|바꿨(?:음|어요)?|교체))?(\\s*(?:은|는))?'
+  + '(?=[\\s:：=\\->→]|귓|$)\\s*([:：=]|->|→|>|-)?\\s*(.*)$');
+const PW_BARE_MAX = 12;
+function passwordInText(text, from) {
+  const lines = String(text || '').split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(PW_LINE_RE);
+    if (!m) continue;
+    const atStart = !/[가-힣A-Za-z]/.test(lines[i].slice(0, m.index));
+    const strong = !!(m[1] || m[2]);
+    if (!strong && !atStart) continue;
+    let value = m[3].trim();
+    if (!value && lines[i + 1] && lines[i + 1].length <= 20) value = lines[i + 1].trim();
+    if (!value) continue;
+    const line = lines[i].length > 80 ? lines[i].slice(0, 80) + '…' : lines[i];
+    if (PW_NONE_RE.test(value)) return { none: true };
+    if (PW_ASK_RE.test(value)) return { value: null, ask: true, from, line };
+    if (!strong && /\s/.test(value)) {
+      if (from !== 'body') continue;                 // a comment: chat, not a password
+      value = value.split(/\s+/)[0];                 // the body: its first word
+    }
+    if (!strong && value.length > PW_BARE_MAX) continue;
+    return { value: value.length > PW_MAX ? value.slice(0, PW_MAX) + '…' : value, from, line };
+  }
+  return null;
+}
+
 function passwordIn(text, from) {
+  if (from !== 'title') return passwordInText(text, from);
   const lines = String(text || '').split('\n');
   for (let i = 0; i < lines.length; i++) {
     const m = lines[i].match(PW_RE);
@@ -524,7 +564,7 @@ function liveUntil(title, t, kind) {
 // 109 closed titles and 21 posts closed by a comment showing as 모집 중).
 //  - anywhere (as part of any word): 출항 · 출발 · 마감 · 종료, except
 //      (출항 / 출발 also with a mark inside, 2026-11-28 - "… 출~항": 출~항 · 출.항 · 출·항 · 출 항, not right after
-//      a syllable - "외출 발표" is no 출발)
+//      a syllable - "외출 발표" is no 출발; and drawn out: 출하앙 · 출하아앙)
 //      마감 / 종료 right after a time - an end time: "아침 09:00 마감!", "10시 종료", "13시 종료 예정"
 //        (출항 after a time is still a departure: "~9시 한명 출항", "10시까지! 출항");
 //      출발못 / 출항못 - it could not leave;
@@ -538,7 +578,7 @@ function liveUntil(title, t, kind) {
 //  - a 디시콘 whose name has 출항 · 출발 · 침몰 · 펑 (the 출항티콘, 망호펑), or whose image is a known
 //    closing one (DCCON_IMAGES: 모비에반콘 24 출항, 45 침몰).
 // source.keywords: more words that count anywhere, on top of these (before 1.12.0 the whole list).
-const CLOSE_ANY_RE = /(?:(?<![가-힣])|(?<=재))출[~.·\s]{1,2}[항발]|출항|출발|마감|종료/g;     // (재: 재출~발 - the 재출발 rule below)
+const CLOSE_ANY_RE = /(?:(?<![가-힣])|(?<=재))(?:출[~.·\s]{1,2}[항발]|출하아*앙)|출항|출발|마감|종료/g;     // (재: 재출~발 - the 재출발 rule below)
 const CLOSE_ANY = ['출항', '출발', '마감', '종료'];
 const CLOSE_DCCON = ['출항', '출발', '침몰', '펑'];
 // 디시콘 known by their image, not their name (user 2026-11-28): a comment's 디시콘 is named by its number in
@@ -578,7 +618,7 @@ function closingWord(text, from, extra = []) {
   const s = String(text || '').replace(/\s*-\s*dc App\s*$/i, '').trim();     // the app's signature
   if (!s) return null;
   for (const m of s.matchAll(CLOSE_ANY_RE)) {
-    const w = m[0].length > 2 ? `출${m[0].slice(-1)}` : m[0];     // 출~항 -> 출항
+    const w = m[0].startsWith('출') ? (m[0].endsWith('발') ? '출발' : '출항') : m[0];     // 출~항 · 출하앙 -> 출항
     const before = s.slice(0, m.index);
     if ((w === '마감' || w === '종료') && TIME_BEFORE_RE.test(before)) continue;
     if ((w === '출항' || w === '출발') && /^\s*못/.test(s.slice(m.index + m[0].length))) continue;

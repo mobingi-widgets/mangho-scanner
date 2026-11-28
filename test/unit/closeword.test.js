@@ -36,6 +36,7 @@ const CHUL = [
   ['출석 체크 망호', 'title', null], ['출근 전 스카스', 'title', null], ['출시 기념 망호', 'title', null], ['외출 발표 전 한판', 'title', null],
   ['정박 망호 출~발못하고 있어요', 'title', null], ['수리하고 재출~발', 'title', null], ['수리하고 재출~발', 'comment', '출발'],
   ['출석부 (출)', 'title', '출'],
+  ['정박 잠망호 출하앙', 'title', '출항'], ['출하아앙~', 'comment', '출항'], ['서류 제출하앙 했어요', 'title', null],
 ];
 for (const [s, from, want] of CHUL) { const got = cw(s, from); check(`출  ${s} [${from}]  -> ${want}`, got === want, `got ${got}`); }
 
